@@ -1,0 +1,21 @@
+version: v2
+
+plugins:
+  # Go（Backend）向け生成
+  - local: protoc-gen-go
+    out: ../backend
+    opt:
+      - paths=import
+      - module=github.com/history-quiz/historyquiz
+  - local: protoc-gen-go-grpc
+    out: ../backend
+    opt:
+      - paths=import
+      - module=github.com/history-quiz/historyquiz
+
+  # TypeScript（Remix）向け生成は後続で確定する。
+  # - remote: buf.build/bufbuild/es
+  #   out: ../client/app/gen
+  #   opt:
+  #     - target=ts
+  #     - import_extension=none

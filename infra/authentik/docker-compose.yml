@@ -1,0 +1,64 @@
+services:
+  # Authentik 自体は Postgres と Redis を必要とするため、ローカル用に同梱する
+  postgresql:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD}
+      POSTGRES_USER: ${AUTHENTIK_POSTGRES_USER}
+      POSTGRES_DB: ${AUTHENTIK_POSTGRES_DB}
+    volumes:
+      - authentik_postgresql:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    volumes:
+      - authentik_redis:/data
+
+  server:
+    # ローカル開発用。運用ではタグ固定を推奨
+    image: ${AUTHENTIK_IMAGE}
+    restart: unless-stopped
+    command: server
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_POSTGRES_USER}
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_POSTGRES_DB}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD}
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD}
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL}
+    depends_on:
+      - postgresql
+      - redis
+    ports:
+      - "${AUTHENTIK_HTTP_PORT}:9000"
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+
+  worker:
+    image: ${AUTHENTIK_IMAGE}
+    restart: unless-stopped
+    command: worker
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_POSTGRES_USER}
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_POSTGRES_DB}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD}
+      AUTHENTIK_REDIS__HOST: redis
+    depends_on:
+      - postgresql
+      - redis
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+
+volumes:
+  authentik_postgresql:
+  authentik_redis:
+  authentik_media:
+  authentik_templates:

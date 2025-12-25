@@ -1,0 +1,12 @@
+{
+  "id": "approval_1766326339183_c2r0zb92s",
+  "title": "history-quiz 要件定義（マイページ・認証追加）承認 再依頼",
+  "filePath": ".spec-workflow/specs/history-quiz/requirements.md",
+  "type": "document",
+  "status": "approved",
+  "createdAt": "2025-12-21T14:12:19.183Z",
+  "category": "spec",
+  "categoryName": "history-quiz",
+  "response": "ダッシュボードから承認",
+  "respondedAt": "2025-12-21T14:12:32.273Z"
+}

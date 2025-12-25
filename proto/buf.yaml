@@ -1,0 +1,12 @@
+version: v2
+
+# proto は Remix ↔ Backend の契約（単一の真実）。
+# 破壊的変更を避けるため、lint/breaking を有効にしておく。
+
+lint:
+  use:
+    - STANDARD
+
+breaking:
+  use:
+    - FILE

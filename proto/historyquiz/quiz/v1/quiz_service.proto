@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package historyquiz.quiz.v1;
+
+import "historyquiz/common/v1/common.proto";
+
+option go_package = "github.com/history-quiz/historyquiz/proto/quiz/v1;quizv1";
+
+// クイズ出題・回答を扱うサービス。
+service QuizService {
+  // 次の問題を取得する。
+  rpc GetQuestion(GetQuestionRequest) returns (GetQuestionResponse);
+
+  // 回答を送信し、正誤判定と結果を返す。
+  rpc SubmitAnswer(SubmitAnswerRequest) returns (SubmitAnswerResponse);
+}
+
+message Choice {
+  string id = 1;
+  string label = 2;
+  int32 ordinal = 3;
+}
+
+message Question {
+  string id = 1;
+  string prompt = 2;
+  repeated Choice choices = 3;
+  string explanation = 4; // 将来の拡張用（初期は空でもよい）
+}
+
+message GetQuestionRequest {
+  historyquiz.common.v1.RequestContext context = 1;
+  // 連続出題で直前の問題を避けたい場合に使う（将来拡張）。
+  string previous_question_id = 2;
+}
+
+message GetQuestionResponse {
+  historyquiz.common.v1.RequestContext context = 1;
+  Question question = 2;
+}
+
+message SubmitAnswerRequest {
+  historyquiz.common.v1.RequestContext context = 1;
+  string question_id = 2;
+  string selected_choice_id = 3;
+}
+
+message SubmitAnswerResponse {
+  historyquiz.common.v1.RequestContext context = 1;
+  bool is_correct = 2;
+  string correct_choice_id = 3;
+  string attempt_id = 4;
+}

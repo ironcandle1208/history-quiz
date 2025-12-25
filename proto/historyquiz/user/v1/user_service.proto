@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package historyquiz.user.v1;
+
+import "historyquiz/common/v1/common.proto";
+
+option go_package = "github.com/history-quiz/historyquiz/proto/user/v1;userv1";
+
+// マイページ向け（履歴/統計）を扱うサービス。
+service UserService {
+  rpc ListMyAttempts(ListMyAttemptsRequest) returns (ListMyAttemptsResponse);
+  rpc GetMyStats(GetMyStatsRequest) returns (GetMyStatsResponse);
+}
+
+message Attempt {
+  string id = 1;
+  string question_id = 2;
+  string question_prompt = 3;
+  string selected_choice_id = 4;
+  bool is_correct = 5;
+  string answered_at = 6; // RFC3339
+}
+
+message Stats {
+  int64 total_attempts = 1;
+  int64 correct_attempts = 2;
+  double accuracy = 3; // 0.0..1.0
+}
+
+message ListMyAttemptsRequest {
+  historyquiz.common.v1.RequestContext context = 1;
+  historyquiz.common.v1.Pagination pagination = 2;
+}
+
+message ListMyAttemptsResponse {
+  historyquiz.common.v1.RequestContext context = 1;
+  repeated Attempt attempts = 2;
+  historyquiz.common.v1.PageInfo page_info = 3;
+}
+
+message GetMyStatsRequest {
+  historyquiz.common.v1.RequestContext context = 1;
+}
+
+message GetMyStatsResponse {
+  historyquiz.common.v1.RequestContext context = 1;
+  Stats stats = 2;
+}

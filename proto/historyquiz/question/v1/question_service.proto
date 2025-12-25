@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package historyquiz.question.v1;
+
+import "historyquiz/common/v1/common.proto";
+
+option go_package = "github.com/history-quiz/historyquiz/proto/question/v1;questionv1";
+
+// 問題作成・編集・管理を扱うサービス。
+service QuestionService {
+  rpc CreateQuestion(CreateQuestionRequest) returns (CreateQuestionResponse);
+  rpc UpdateQuestion(UpdateQuestionRequest) returns (UpdateQuestionResponse);
+  rpc GetMyQuestion(GetMyQuestionRequest) returns (GetMyQuestionResponse);
+  rpc ListMyQuestions(ListMyQuestionsRequest) returns (ListMyQuestionsResponse);
+}
+
+message QuestionSummary {
+  string id = 1;
+  string prompt = 2;
+  string updated_at = 3; // RFC3339 文字列（言語間互換を優先）
+}
+
+message QuestionDetail {
+  string id = 1;
+  string prompt = 2;
+  repeated Choice choices = 3;
+  string correct_choice_id = 4;
+  string explanation = 5;
+  string updated_at = 6; // RFC3339
+}
+
+message Choice {
+  string id = 1;
+  string label = 2;
+  int32 ordinal = 3;
+}
+
+// 作問入力（作成/更新で共通）。
+// NOTE: choices は常に4件であることをバックエンドで検証する。
+message QuestionDraft {
+  string prompt = 1;
+  repeated string choices = 2; // 期待: 4件
+  int32 correct_ordinal = 3;   // 期待: 0..3
+  string explanation = 4;
+}
+
+message CreateQuestionRequest {
+  historyquiz.common.v1.RequestContext context = 1;
+  QuestionDraft draft = 2;
+}
+
+message CreateQuestionResponse {
+  historyquiz.common.v1.RequestContext context = 1;
+  QuestionDetail question = 2;
+}
+
+message UpdateQuestionRequest {
+  historyquiz.common.v1.RequestContext context = 1;
+  string question_id = 2;
+  QuestionDraft draft = 3;
+}
+
+message UpdateQuestionResponse {
+  historyquiz.common.v1.RequestContext context = 1;
+  QuestionDetail question = 2;
+}
+
+message GetMyQuestionRequest {
+  historyquiz.common.v1.RequestContext context = 1;
+  string question_id = 2;
+}
+
+message GetMyQuestionResponse {
+  historyquiz.common.v1.RequestContext context = 1;
+  QuestionDetail question = 2;
+}
+
+message ListMyQuestionsRequest {
+  historyquiz.common.v1.RequestContext context = 1;
+  historyquiz.common.v1.Pagination pagination = 2;
+}
+
+message ListMyQuestionsResponse {
+  historyquiz.common.v1.RequestContext context = 1;
+  repeated QuestionSummary questions = 2;
+  historyquiz.common.v1.PageInfo page_info = 3;
+}

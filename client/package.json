@@ -1,0 +1,11 @@
+{
+  "name": "history-quiz-client",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "remix dev",
+    "build": "remix build",
+    "start": "remix-serve build/server/index.js"
+  }
+}
+

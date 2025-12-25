@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package historyquiz.common.v1;
+
+// 共通の型定義。
+// NOTE: userId は最終的に OIDC sub を使う想定だが、将来変更しうるため文字列として扱う。
+
+option go_package = "github.com/history-quiz/historyquiz/proto/common/v1;commonv1";
+
+// リクエストを横断して追跡するためのコンテキスト。
+// 実際の伝播は gRPC metadata（例: x-request-id）を主とするが、デバッグ用途で message 側にも持てるようにする。
+message RequestContext {
+  string request_id = 1;
+}
+
+// 認証済みユーザーに関するコンテキスト。
+// セキュリティ上、バックエンドは message 内の user_id を信頼せず、metadata から取得した値を優先する。
+message UserContext {
+  string user_id = 1;
+}
+
+// ページネーション（将来拡張を見据えた最小形）。
+message Pagination {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message PageInfo {
+  string next_page_token = 1;
+}
+
+// 入力エラーの詳細（フィールド単位）。
+message FieldViolation {
+  string field = 1;
+  string description = 2;
+}
+
+// エラー詳細（INVALID_ARGUMENT 等で返す想定）。
+// NOTE: gRPC status code は別で返し、ここはユーザーに見せたい情報（フィールドエラー等）を載せる。
+message ErrorDetail {
+  repeated FieldViolation field_violations = 1;
+  map<string, string> metadata = 2;
+}

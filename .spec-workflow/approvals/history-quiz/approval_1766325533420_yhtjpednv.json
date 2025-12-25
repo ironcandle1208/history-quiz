@@ -1,0 +1,21 @@
+{
+  "id": "approval_1766325533420_yhtjpednv",
+  "title": "history-quiz 要件定義の承認",
+  "filePath": ".spec-workflow/specs/history-quiz/requirements.md",
+  "type": "document",
+  "status": "needs-revision",
+  "createdAt": "2025-12-21T13:58:53.420Z",
+  "category": "spec",
+  "categoryName": "history-quiz",
+  "response": "Feedback Summary (1 comments):\n\nGeneral Comments:\n1. マイページログイン機能を作成し、自分の正答率や自分の作成した問題のインプレッションがわかるようにしたいです。\n\n",
+  "annotations": "{\n  \"decision\": \"needs-revision\",\n  \"comments\": [\n    {\n      \"type\": \"general\",\n      \"comment\": \"マイページログイン機能を作成し、自分の正答率や自分の作成した問題のインプレッションがわかるようにしたいです。\",\n      \"timestamp\": \"2025-12-21T14:03:04.624Z\",\n      \"id\": \"comment_1766325784624_cxtfhk30i\"\n    }\n  ],\n  \"summary\": \"Feedback Summary (1 comments):\\n\\nGeneral Comments:\\n1. マイページログイン機能を作成し、自分の正答率や自分の作成した問題のインプレッションがわかるようにしたいです。\\n\\n\",\n  \"timestamp\": \"2025-12-21T14:03:06.909Z\"\n}",
+  "respondedAt": "2025-12-21T14:03:06.922Z",
+  "comments": [
+    {
+      "type": "general",
+      "comment": "マイページログイン機能を作成し、自分の正答率や自分の作成した問題のインプレッションがわかるようにしたいです。",
+      "timestamp": "2025-12-21T14:03:04.624Z",
+      "id": "comment_1766325784624_cxtfhk30i"
+    }
+  ]
+}
