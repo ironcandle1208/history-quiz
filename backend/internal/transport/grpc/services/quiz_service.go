@@ -2,54 +2,105 @@ package services
 
 import (
 	"context"
+	"errors"
 
+	"github.com/history-quiz/historyquiz/internal/app/contextkeys"
+	"github.com/history-quiz/historyquiz/internal/domain/apperror"
+	quizusecase "github.com/history-quiz/historyquiz/internal/usecase/quiz"
+	commonv1 "github.com/history-quiz/historyquiz/proto/common/v1"
 	quizv1 "github.com/history-quiz/historyquiz/proto/quiz/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-// QuizService は QuizServiceServer の暫定実装。
-// NOTE: Phase1 の初期段階では DB 実装前のため、固定の問題を返す（後続タスクで置き換える）。
+// QuizService は QuizServiceServer 実装。
 type QuizService struct {
 	quizv1.UnimplementedQuizServiceServer
+	usecase *quizusecase.Usecase
 }
 
 // NewQuizService は QuizService を生成する。
-func NewQuizService() *QuizService {
-	return &QuizService{}
+func NewQuizService(usecase *quizusecase.Usecase) *QuizService {
+	return &QuizService{usecase: usecase}
 }
 
 func (s *QuizService) GetQuestion(ctx context.Context, req *quizv1.GetQuestionRequest) (*quizv1.GetQuestionResponse, error) {
-	_ = ctx
-	_ = req
-
-	// 既定問題（暫定）。choices は常に4件に揃える。
-	q := &quizv1.Question{
-		Id:     "default-question-1",
-		Prompt: "古代ローマの首都はどこ？",
-		Choices: []*quizv1.Choice{
-			{Id: "c1", Label: "ローマ", Ordinal: 0},
-			{Id: "c2", Label: "アテネ", Ordinal: 1},
-			{Id: "c3", Label: "カルタゴ", Ordinal: 2},
-			{Id: "c4", Label: "アレクサンドリア", Ordinal: 3},
-		},
-		Explanation: "ローマは古代ローマの中心都市として知られる。",
+	if s.usecase == nil {
+		return nil, status.Error(codes.FailedPrecondition, "サーバ初期化が未完了です")
 	}
 
-	return &quizv1.GetQuestionResponse{
-		Context: req.GetContext(),
-		Question: q,
-	}, nil
+	requestID := requestIDForResponse(ctx, req.GetContext())
+	q, err := s.usecase.GetQuestion(ctx, requestID.GetRequestId(), req.GetPreviousQuestionId())
+	if err != nil {
+		return nil, toStatusError(err)
+	}
+
+	resp := &quizv1.GetQuestionResponse{
+		Context: requestID,
+		Question: &quizv1.Question{
+			Id:          q.ID,
+			Prompt:      q.Prompt,
+			Explanation: q.Explanation,
+		},
+	}
+	for _, c := range q.Choices {
+		resp.Question.Choices = append(resp.Question.Choices, &quizv1.Choice{
+			Id:      c.ID,
+			Label:   c.Label,
+			Ordinal: c.Ordinal,
+		})
+	}
+	return resp, nil
 }
 
 func (s *QuizService) SubmitAnswer(ctx context.Context, req *quizv1.SubmitAnswerRequest) (*quizv1.SubmitAnswerResponse, error) {
-	_ = ctx
+	if s.usecase == nil {
+		return nil, status.Error(codes.FailedPrecondition, "サーバ初期化が未完了です")
+	}
 
-	// 暫定: default-question-1 の正解は c1 とする。
-	correctChoiceID := "c1"
+	userID, _ := contextkeys.UserID(ctx) // 未ログインの場合は空でよい（履歴は保存しない）
+
+	result, err := s.usecase.SubmitAnswer(ctx, userID, req.GetQuestionId(), req.GetSelectedChoiceId())
+	if err != nil {
+		return nil, toStatusError(err)
+	}
+
 	return &quizv1.SubmitAnswerResponse{
-		Context:         req.GetContext(),
-		IsCorrect:       req.GetSelectedChoiceId() == correctChoiceID,
-		CorrectChoiceId: correctChoiceID,
-		AttemptId:       "",
+		Context:         requestIDForResponse(ctx, req.GetContext()),
+		IsCorrect:       result.IsCorrect,
+		CorrectChoiceId: result.CorrectChoiceID,
+		AttemptId:       result.AttemptID,
 	}, nil
 }
 
+// requestIDForResponse は response に載せる request_id を決定する。
+// 混同しやすい点: request_id は「追跡用」なので、message 側より metadata→context を優先する。
+func requestIDForResponse(ctx context.Context, reqCtx *commonv1.RequestContext) *commonv1.RequestContext {
+	if requestID, ok := contextkeys.RequestID(ctx); ok {
+		return &commonv1.RequestContext{RequestId: requestID}
+	}
+	if reqCtx != nil && reqCtx.GetRequestId() != "" {
+		return &commonv1.RequestContext{RequestId: reqCtx.GetRequestId()}
+	}
+	return &commonv1.RequestContext{}
+}
+
+// toStatusError は usecase のエラーを gRPC status に変換する。
+func toStatusError(err error) error {
+	var appErr *apperror.Error
+	if errors.As(err, &appErr) {
+		switch appErr.Code {
+		case apperror.CodeInvalidArgument:
+			return status.Error(codes.InvalidArgument, appErr.Message)
+		case apperror.CodeNotFound:
+			return status.Error(codes.NotFound, appErr.Message)
+		case apperror.CodePermissionDenied:
+			return status.Error(codes.PermissionDenied, appErr.Message)
+		case apperror.CodeUnauthenticated:
+			return status.Error(codes.Unauthenticated, appErr.Message)
+		default:
+			return status.Error(codes.Internal, appErr.Message)
+		}
+	}
+	return status.Error(codes.Internal, "内部エラー")
+}

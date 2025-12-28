@@ -39,6 +39,10 @@
   - HTTP: JSON
   - gRPC: Protocol Buffers
 
+### Data Lifecycle（削除方針）
+- 過去データの整合性（解答履歴/正答率）を保つため、`Question` は `deleted_at`（論理削除）を採用する
+- 一覧/出題クエリは `deleted_at IS NULL` を標準とする（`sqlc` のクエリで徹底する）
+
 ### External Integrations (if applicable)
 - **Protocols**: HTTP（Browser→Remix）、gRPC（Remix→Backend）
 - **Authentication**:
@@ -190,6 +194,7 @@ JSON で返す場合は、以下の形を基本とする（実装でキー名は
 10. **Fly.io（デプロイ）**: Remix/Go/Authentik をコンテナで統一的に運用でき、MVPの公開コストと運用コストのバランスが良いため
 11. **gRPC-JS（`@grpc/grpc-js`）**: BFF 構成でサーバー側からのみ gRPC を呼ぶため、Node.js 向け実装を採用する
 12. **gRPC→HTTP 変換ルールの標準化**: 一貫したエラーレスポンスと運用容易性（調査/復旧）を確保するため
+13. **`deleted_at`（論理削除）**: 解答履歴/正答率の整合性を壊さず、運用上の削除ニーズに対応するため
 
 ## Known Limitations
 - Neon/Fly.io の具体設定（VPC/ネットワーク、環境変数、シークレット、デプロイ手順）は実装フェーズで確定し、本ドキュメントを更新する

@@ -31,6 +31,7 @@ client/.cache/
 *.exe
 *.out
 *.test
+.cache/
 
 # buf/proto 生成時のキャッシュ・一時ディレクトリ
 .buf-cache/

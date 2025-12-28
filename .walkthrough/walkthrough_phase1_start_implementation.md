@@ -35,6 +35,12 @@
   - `proto/buf.yaml`, `proto/buf.gen.yaml`（buf）
   - `backend/proto/**`（Go 向け生成物）
   - `backend/internal/transport/grpc/services/*`（サービスの暫定実装）
+- Go バックエンドで Repository/Usecase/Transport を実装し、暫定実装を置き換えた。
+  - `.walkthrough/walkthrough_backend_usecase_repository_transport.md` を追加
+  - `backend/internal/infrastructure/postgres/*`（DB接続/Repository 実装）
+  - `backend/internal/usecase/*`（Quiz/Question/User）
+  - `backend/internal/transport/grpc/services/*`（usecase 委譲）
+  - `backend/cmd/server/main.go`（DI/DB接続）
 
 ## 背景・意図
 - 早期にブレやすい前提（ユーザー識別子とマイグレーション運用）を固定しないと、DB/認可/セッションの実装が分岐しやすい。
@@ -48,6 +54,5 @@
  - Remix についても依存関係の導入（`pnpm add` 等）は未実施のため、起動検証は未実施。
 
 ## 次にやること
-- Go バックエンドの transport/usecase/repository の骨格を作る
-- Remix のセッションと gRPC クライアント（サーバ専用）の骨格を作る
- - DB接続と sqlc 生成（Repository）を実装し、暫定実装を置き換える
+- バックエンド主要ユースケースのユニットテストを追加する（`docs/tasks.md` の 16）
+- Remix を初期化し、ルーティング/セッション/ログインガードを実装する（`docs/tasks.md` の 17〜18）

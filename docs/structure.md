@@ -66,6 +66,7 @@ project-root/
   - フォームは `conform` を基本とし、フィールドエラーの表示方法を統一する
 - Backend は `internal/` にドメインごとのパッケージを持ち、gRPC ハンドラは「薄く」しユースケースへ委譲する
   - DBアクセスは `sqlc` を採用し、`backend/db/queries/` に生SQLを配置する（生成物の配置は `sqlc.yaml` で統一）
+  - 論理削除（`deleted_at`）を採用するテーブルは、通常クエリで `deleted_at IS NULL` を標準とする（クエリの書き忘れを防ぐため、命名規約/テンプレート化も検討する）
 
 ## Code Structure Patterns
 

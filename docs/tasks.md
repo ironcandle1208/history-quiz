@@ -117,7 +117,7 @@
   - _Requirements: 6.1, 7.1, 8.1, 9.4_
   - _Prompt: Role: Go Backend Engineer | Task: Implement interceptors to extract userId and requestId from metadata, enforce auth on protected methods, propagate requestId to logs | Restrictions: Do not trust client input; return proper gRPC status codes | Success: Protected RPCs reject unauthenticated calls; requestId is available in context_
 
-- [ ] 11. Quiz ユースケース（出題/フォールバック）を実装する
+- [x] 11. Quiz ユースケース（出題/フォールバック）を実装する
   - File: `backend/internal/usecase/quiz/*.go`（新規）
   - Implement:
     - 保存済み問題からの出題
@@ -127,28 +127,28 @@
   - _Requirements: 1.1, 2.2, 4.1-4.2_
   - _Prompt: Role: Go Backend Developer | Task: Implement quiz question selection usecase with fallback logic; ensure deterministic behavior for tests | Restrictions: No UI concerns; keep logic testable; handle "no questions" clearly | Success: Usecase returns a question or NOT_FOUND with meaningful details_
 
-- [ ] 12. Quiz の判定・Attempt 保存を実装する
+- [x] 12. Quiz の判定・Attempt 保存を実装する
   - File: `backend/internal/usecase/quiz/*.go`（継続）, `backend/internal/usecase/attempt/*.go`（必要なら新規）
   - Purpose: 回答の正誤判定と履歴記録を一貫して行い、マイページ集計へ繋げる
   - _Leverage: `docs/design.md`（Attempt, AnswerKey）, `docs/tech.md`（Validation/Security）_
   - _Requirements: 1.2-1.4, 6.1_
   - _Prompt: Role: Go Backend Developer | Task: Implement submit answer usecase validating choice belongs to question, computing correctness, and persisting attempt | Restrictions: Must enforce ownership/userId separation; validate invariants server-side | Success: SubmitAnswer returns correctness and stores attempt reliably_
 
-- [ ] 13. Question の作成・更新・取得・一覧ユースケースを実装する（所有者チェック含む）
+- [x] 13. Question の作成・更新・取得・一覧ユースケースを実装する（所有者チェック含む）
   - File: `backend/internal/usecase/question/*.go`（新規）
   - Purpose: 作問と管理（要件3,7,8）をバックエンド側の最終責務として保証する
   - _Leverage: `docs/requirements.md`（3,7,8,9）, `docs/tech.md`（Security）_
   - _Requirements: 3.1-3.3, 7.1-7.2, 8.1-8.3, 9.4_
   - _Prompt: Role: Go Backend Developer | Task: Implement question CRUD usecases with full validation (4 choices, correct choice) and ownership authorization | Restrictions: Must return PERMISSION_DENIED for cross-user access; validate all inputs | Success: User can create/list/get/update only their questions; invalid input is INVALID_ARGUMENT_
 
-- [ ] 14. マイページ用の履歴/統計ユースケースを実装する
+- [x] 14. マイページ用の履歴/統計ユースケースを実装する
   - File: `backend/internal/usecase/user/*.go`（新規）
   - Purpose: 要件6の「履歴表示」「正答率」を提供する
   - _Leverage: `docs/design.md`（Attempt）, `docs/requirements.md`（6）_
   - _Requirements: 6.1-6.3_
   - _Prompt: Role: Go Backend Developer | Task: Implement list attempts and compute stats (accuracy); keep aggregation efficient and testable | Restrictions: Do not leak other users' data; keep responses minimal | Success: Usecase returns attempts and stats for requesting user only_
 
-- [ ] 15. gRPC transport（QuizService/QuestionService/UserService）を実装する
+- [x] 15. gRPC transport（QuizService/QuestionService/UserService）を実装する
   - File: `backend/internal/transport/grpc/*.go`（新規）
   - Purpose: proto 契約とユースケースを接続し、エラーを gRPC status に正しく落とす
   - _Leverage: `docs/tech.md`（Error Handling Standards）, `docs/design.md`（Backend Layering）_

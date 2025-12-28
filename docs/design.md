@@ -142,6 +142,7 @@ Remix は以下の分割を基本とする。
 - authorUserId: string (UUID)  # 作成者（自作問題の所有者）
 - prompt: string              # 問題文
 - explanation: string?        # 任意（将来拡張）
+- deletedAt: datetime?        # 論理削除（削除済みは出題/一覧から除外）
 - createdAt: datetime
 - updatedAt: datetime
 ```
@@ -169,6 +170,11 @@ Remix は以下の分割を基本とする。
 - isCorrect: boolean
 - answeredAt: datetime
 ```
+
+### Deletion Policy（論理削除/物理削除）
+- `Question` は `deletedAt` による論理削除を基本とする（解答履歴や正答率の整合性を維持するため）
+- 削除済み `Question` は出題対象および通常の一覧/編集対象から除外する
+- `Attempt`（解答履歴）はプロダクト要件（進捗表示）に直結するため、基本は保持する（削除方針は別途定める）
 
 ## Error Handling
 
