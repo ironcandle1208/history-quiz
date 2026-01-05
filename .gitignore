@@ -32,6 +32,8 @@ client/.cache/
 *.out
 *.test
 .cache/
+.gocache/
+.gotmp/
 
 # buf/proto 生成時のキャッシュ・一時ディレクトリ
 .buf-cache/
