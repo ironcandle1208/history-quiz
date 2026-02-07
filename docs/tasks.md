@@ -174,7 +174,7 @@
   - _Requirements: 1.1, 3.1, 6.1, 7.1, 9.1_
   - _Prompt: Role: Remix Developer | Task: Scaffold Remix app routes for quiz/questions/me/login; keep routes thin and delegate to services | Restrictions: Use TypeScript; avoid importing gRPC client from browser bundles | Success: Routes render and server-side loaders/actions are in place_
 
-- [ ] 18. Remix のセッション基盤（Cookie）とログインガードを実装する
+- [x] 18. Remix のセッション基盤（Cookie）とログインガードを実装する
   - File: `client/app/services/session.server.ts`（新規）, `client/app/services/auth.server.ts`（新規）
   - Purpose: 未認証時に作問/マイページへアクセスできないようにし（要件9）、userId をサーバ側で安定的に保持する
   - _Leverage: `docs/tech.md`（Authentication）, `docs/design.md`（Security/Error Scenarios）_

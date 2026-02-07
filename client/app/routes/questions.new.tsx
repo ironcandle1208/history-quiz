@@ -5,18 +5,22 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { Form, useActionData } from "@remix-run/react";
 
+import { requireAuthenticatedUser } from "../services/auth.server";
+
 // loader は現時点では不要だが、Remix のルーティング骨格として用意しておく。
-export async function loader(_args: LoaderFunctionArgs) {
-  return json({ ok: true });
+export async function loader({ request }: LoaderFunctionArgs) {
+  const user = await requireAuthenticatedUser(request);
+  return json({ ok: true, userId: user.userId });
 }
 
 type ActionData =
-  | { ok: true; prompt: string }
+  | { ok: true; prompt: string; userId: string }
   | { ok: false; message: string; fieldErrors?: { prompt?: string } };
 
 // action は「問題作成」のフォーム送信を受ける。
 // NOTE: 後続タスクで zod+conform + gRPC(CreateQuestion) に置き換える。
 export async function action({ request }: ActionFunctionArgs) {
+  const user = await requireAuthenticatedUser(request);
   const formData = await request.formData();
   const prompt = formData.get("prompt");
 
@@ -27,7 +31,7 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
-  return json<ActionData>({ ok: true, prompt: prompt.trim() });
+  return json<ActionData>({ ok: true, prompt: prompt.trim(), userId: user.userId });
 }
 
 export default function QuestionsNewRoute() {
@@ -63,7 +67,7 @@ export default function QuestionsNewRoute() {
 
       {actionData?.ok === true ? (
         <p>
-          保存しました（仮）：<code>{actionData.prompt}</code>
+          保存しました（仮）：<code>{actionData.prompt}</code> / user: <code>{actionData.userId}</code>
         </p>
       ) : null}
     </section>

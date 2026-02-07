@@ -2,16 +2,23 @@
 
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, Link } from "@remix-run/react";
+import { useLoaderData } from "@remix-run/react";
+
+import { requireAuthenticatedUser } from "../services/auth.server";
 
 type LoaderData = {
   // NOTE: 後続タスクで gRPC（ListMyAttempts/GetMyStats/ListMyQuestions）に差し替える。
   message: string;
+  userId: string;
 };
 
 // loader はマイページの表示に必要なデータを用意する（暫定）。
-export async function loader(_args: LoaderFunctionArgs) {
-  const data: LoaderData = { message: "（未実装）履歴/統計は後続タスクで追加します。" };
+export async function loader({ request }: LoaderFunctionArgs) {
+  const user = await requireAuthenticatedUser(request);
+  const data: LoaderData = {
+    message: "（未実装）履歴/統計は後続タスクで追加します。",
+    userId: user.userId,
+  };
   return json(data);
 }
 
@@ -23,7 +30,7 @@ export default function MeRoute() {
       <h1>マイページ</h1>
       <p className="muted">{data.message}</p>
       <p>
-        まずは <Link to="/login">ログイン</Link> が必要です（認証は後続タスクで実装）。
+        ログイン中ユーザー: <code>{data.userId}</code>
       </p>
     </section>
   );

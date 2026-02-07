@@ -5,30 +5,34 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { Form, useActionData, useLoaderData } from "@remix-run/react";
 
-type LoaderData = { questionId: string };
+import { requireAuthenticatedUser } from "../services/auth.server";
+
+type LoaderData = { questionId: string; userId: string };
 
 // loader は編集対象（id）を受け取り、表示に必要なデータを返す。
 // NOTE: 後続タスクで GetMyQuestion を呼び出し、初期値を埋める。
-export async function loader({ params }: LoaderFunctionArgs) {
+export async function loader({ params, request }: LoaderFunctionArgs) {
+  const user = await requireAuthenticatedUser(request);
   const questionId = params.id;
   if (!questionId) {
     return json({ message: "id が指定されていません。" }, { status: 400 });
   }
 
-  const data: LoaderData = { questionId };
+  const data: LoaderData = { questionId, userId: user.userId };
   return json(data);
 }
 
-type ActionData = { ok: true; questionId: string } | { ok: false; message: string };
+type ActionData = { ok: true; questionId: string; userId: string } | { ok: false; message: string };
 
 // action は編集フォーム送信を受ける（暫定）。
-export async function action({ params }: ActionFunctionArgs) {
+export async function action({ params, request }: ActionFunctionArgs) {
+  const user = await requireAuthenticatedUser(request);
   const questionId = params.id;
   if (!questionId) {
     return json<ActionData>({ ok: false, message: "id が指定されていません。" }, { status: 400 });
   }
 
-  return json<ActionData>({ ok: true, questionId });
+  return json<ActionData>({ ok: true, questionId, userId: user.userId });
 }
 
 export default function QuestionsEditRoute() {
@@ -41,12 +45,19 @@ export default function QuestionsEditRoute() {
       <p className="muted">
         編集対象: <code>{data.questionId}</code>
       </p>
+      <p className="muted">
+        ログイン中ユーザー: <code>{data.userId}</code>
+      </p>
 
       <Form method="post">
         <button type="submit">保存（仮）</button>
       </Form>
 
-      {actionData?.ok === true ? <p>保存しました（仮）</p> : null}
+      {actionData?.ok === true ? (
+        <p>
+          保存しました（仮） / user: <code>{actionData.userId}</code>
+        </p>
+      ) : null}
     </section>
   );
 }

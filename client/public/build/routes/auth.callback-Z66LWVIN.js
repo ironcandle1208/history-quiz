@@ -1,0 +1,1 @@
+import{c as a,e as o}from"/build/_shared/chunk-43PMWAD2.js";var t=a(o(),1);function u(){return(0,t.jsxs)("main",{children:[(0,t.jsx)("h1",{children:"\u8A8D\u8A3C\u30B3\u30FC\u30EB\u30D0\u30C3\u30AF"}),(0,t.jsx)("p",{children:"\u672A\u5B9F\u88C5"})]})}export{u as default};
