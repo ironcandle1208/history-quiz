@@ -155,14 +155,14 @@
   - _Requirements: 5.2_
   - _Prompt: Role: Go gRPC Engineer | Task: Implement gRPC handlers mapping requests to usecases; convert domain errors to gRPC status codes consistently | Restrictions: Keep handlers thin; no DB calls directly in transport | Success: All RPCs respond with correct status codes and payloads_
 
-- [ ] 16. バックエンドのユニットテスト（主要ユースケース）を追加する
+- [x] 16. バックエンドのユニットテスト（主要ユースケース）を追加する
   - File: `backend/internal/usecase/**/**/*_test.go`（新規）
   - Purpose: 出題フォールバック、判定、所有者認可、入力検証を回帰から守る
   - _Leverage: `docs/tech.md`（Testing Strategy）_
   - _Requirements: 1-4, 6-9_
   - _Prompt: Role: QA/Backend Engineer | Task: Write unit tests for usecases covering success/failure; include authorization and validation cases | Restrictions: Keep tests deterministic; avoid network/external dependencies | Success: Tests reliably cover main branches and edge cases_
 
-- [ ] 17. Remix アプリを初期化し、基本ルーティングを作成する
+- [x] 17. Remix アプリを初期化し、基本ルーティングを作成する
   - File: `client/app/routes/*`（新規）
   - Routes:
     - `/quiz`

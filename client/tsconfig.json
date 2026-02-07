@@ -9,6 +9,5 @@
     "skipLibCheck": true,
     "types": []
   },
-  "include": ["app/**/*.ts", "app/**/*.tsx"]
+  "include": ["app/**/*.ts", "app/**/*.tsx", "app/**/*.d.ts"]
 }
-
