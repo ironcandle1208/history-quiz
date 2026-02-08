@@ -3,7 +3,7 @@
 
 import type { SubmissionResult } from "@conform-to/react";
 import { getCollectionProps, getFormProps, getInputProps, getTextareaProps, useForm } from "@conform-to/react";
-import { getZodConstraint, parseWithZod } from "@conform-to/zod";
+import { getZodConstraint, parseWithZod } from "@conform-to/zod/v4";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { Form, useActionData, useNavigation } from "@remix-run/react";

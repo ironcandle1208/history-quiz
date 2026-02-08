@@ -255,7 +255,7 @@
   - _Requirements: All_
   - _Prompt: Role: Integration Test Engineer | Task: Implement integration tests for Remix services calling a test gRPC backend (or mocked transport) for key user flows | Restrictions: Keep tests deterministic; avoid external network | Success: Tests cover key flows and catch contract regressions_
 
-- [ ] 28. E2E（最小限）を追加する（ログイン/作問/クイズ/マイページ）
+- [x] 28. E2E（最小限）を追加する（ログイン/作問/クイズ/マイページ）
   - File: `client/tests/e2e/*`（新規）
   - Purpose: 実ユーザ導線での退行を最小コストで防ぐ
   - _Leverage: `docs/tech.md`（End-to-End Testing）_

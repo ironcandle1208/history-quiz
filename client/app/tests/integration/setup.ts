@@ -37,7 +37,8 @@ function toFieldErrors(issues: Array<{ message: string; path: PropertyKey[] }>):
   return mapped;
 }
 
-vi.mock("@conform-to/zod", async () => {
+// createConformZodMockModule は @conform-to/zod 互換モックの実体を生成する。
+async function createConformZodMockModule() {
   const zodModule = await import("zod");
 
   return {
@@ -69,4 +70,7 @@ vi.mock("@conform-to/zod", async () => {
       };
     },
   };
-});
+}
+
+vi.mock("@conform-to/zod", createConformZodMockModule);
+vi.mock("@conform-to/zod/v4", createConformZodMockModule);
