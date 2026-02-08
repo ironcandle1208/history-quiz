@@ -230,7 +230,7 @@
   - _Requirements: 6.1-6.3, 7.1-7.2, 9.4_
   - _Prompt: Role: Frontend Engineer | Task: Implement my page loader calling ListMyAttempts/GetMyStats/ListMyQuestions; render empty states clearly | Restrictions: Do not leak other users' data; handle unauthenticated redirect | Success: My page shows attempts, accuracy, and question list with empty state messaging_
 
-- [ ] 25. 問題編集（取得→編集→保存）を実装する
+- [x] 25. 問題編集（取得→編集→保存）を実装する
   - File: `client/app/routes/questions.$id.edit.tsx`（新規想定）
   - Purpose: 要件8の編集フローを完成させる（所有者でない場合はエラー/禁止）
   - _Leverage: `docs/requirements.md`（8）, `docs/design.md`（Error Scenarios）_
