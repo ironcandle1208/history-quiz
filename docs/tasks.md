@@ -262,7 +262,7 @@
   - _Requirements: 1-9_
   - _Prompt: Role: QA Automation Engineer | Task: Add minimal E2E tests for main journeys; ensure they can run locally with dockerized deps | Restrictions: Keep suite small; avoid flaky waits; use stable selectors | Success: E2E covers critical flows and runs reliably_
 
-- [ ] 29. ローカル開発手順を整備する（Authentik/DB/起動）
+- [x] 29. ローカル開発手順を整備する（Authentik/DB/起動）
   - File: `docs/Phase1/local-development.md`（新規）
   - Include:
     - `infra/authentik` の起動手順
