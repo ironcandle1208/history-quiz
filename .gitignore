@@ -26,6 +26,7 @@ pnpm-debug.log*
 # Remix（ビルド成果物/キャッシュ）
 client/build/
 client/.cache/
+client/public/build/
 
 # Go（ビルド成果物）
 *.exe

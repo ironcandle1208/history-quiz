@@ -188,7 +188,7 @@
   - _Requirements: 9.1-9.3_
   - _Prompt: Role: Auth Engineer (Remix/OIDC) | Task: Implement OIDC Authorization Code flow with Authentik, store user session, handle errors and logout | Restrictions: Avoid leaking secrets; validate state/nonce; keep server-only logic | Success: Users can log in and session persists; failures show clear error_
 
-- [ ] 20. Remix の gRPC クライアント（サーバ側専用）を実装する
+- [x] 20. Remix の gRPC クライアント（サーバ側専用）を実装する
   - File: `client/app/grpc/client.server.ts`（新規）, `client/app/grpc/*.ts`（新規）
   - Include:
     - requestId の生成/伝播
