@@ -2,11 +2,14 @@
 // Remix(action) 側の一次検証として使用し、バックエンド側検証の前段で UX を整える。
 
 import { z } from "zod";
+import { createRequiredTrimmedTextSchema } from "./common";
 
 export const QUESTION_CHOICES_COUNT = 4;
 
 const MAX_EXPLANATION_LENGTH = 500;
-const requiredText = z.string().trim().min(1, "必須です。");
+const CHOICE_FIELD_WITH_INDEX_PATTERN = /^draft\.choices\[(\d+)\]$/;
+const CHOICE_FIELD_WITH_INDEX_FALLBACK_PATTERN = /^choices\[(\d+)\]$/;
+const requiredText = createRequiredTrimmedTextSchema("必須です。");
 
 export const createQuestionFormSchema = z.object({
   prompt: requiredText,
@@ -25,3 +28,44 @@ export const createQuestionFormSchema = z.object({
 });
 
 export type CreateQuestionFormValue = z.infer<typeof createQuestionFormSchema>;
+
+// mapQuestionGrpcFieldToConformField はバックエンド由来の field 名を conform 側の name に揃える。
+export function mapQuestionGrpcFieldToConformField(field: string): string | null {
+  switch (field) {
+    case "draft.prompt":
+    case "prompt":
+      return "prompt";
+    case "draft.choices":
+    case "choices":
+      return "choices";
+    case "draft.correct_ordinal":
+    case "draft.correctOrdinal":
+    case "correct_ordinal":
+    case "correctOrdinal":
+      return "correctOrdinal";
+    case "draft.explanation":
+    case "explanation":
+      return "explanation";
+    default: {
+      const indexedChoiceMatch =
+        field.match(CHOICE_FIELD_WITH_INDEX_PATTERN) ?? field.match(CHOICE_FIELD_WITH_INDEX_FALLBACK_PATTERN);
+      if (indexedChoiceMatch) {
+        return `choices[${indexedChoiceMatch[1]}]`;
+      }
+      return null;
+    }
+  }
+}
+
+// toQuestionConformFieldErrors は gRPC fieldErrors を conform.reply 形式へ変換する。
+export function toQuestionConformFieldErrors(fieldErrors: Record<string, string>): Record<string, string[]> {
+  const converted: Record<string, string[]> = {};
+  for (const [field, message] of Object.entries(fieldErrors)) {
+    const mappedField = mapQuestionGrpcFieldToConformField(field);
+    if (!mappedField) {
+      continue;
+    }
+    converted[mappedField] = [message];
+  }
+  return converted;
+}

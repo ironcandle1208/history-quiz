@@ -3,6 +3,7 @@
 
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
+import { parseWithZod } from "@conform-to/zod";
 import {
   Form,
   Link,
@@ -15,6 +16,7 @@ import {
 
 import type { QuizQuestion } from "../grpc/quiz.server";
 import { getQuestion, submitAnswer } from "../grpc/quiz.server";
+import { quizAnswerFormSchema, resolveQuizChoiceFieldError } from "../schemas/quiz";
 import { normalizeGrpcHttpError, throwGrpcErrorResponse } from "../services/grpc-error.server";
 import { getUser } from "../services/session.server";
 
@@ -55,11 +57,6 @@ function toOptionalTrimmedString(value: FormDataEntryValue | string | null): str
   return normalized.length > 0 ? normalized : undefined;
 }
 
-// resolveChoiceFieldError は gRPC 由来の field 名の揺れを UI の choiceId へ寄せる。
-function resolveChoiceFieldError(fieldErrors: Record<string, string>): string | undefined {
-  return fieldErrors.choiceId ?? fieldErrors.selectedChoiceId ?? fieldErrors.selected_choice_id;
-}
-
 // loader は SSR 時の出題データを取得する。
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await getUser(request);
@@ -97,29 +94,25 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export async function action({ request }: ActionFunctionArgs) {
   const user = await getUser(request);
   const formData = await request.formData();
-  const questionId = toOptionalTrimmedString(formData.get("questionId"));
-  const selectedChoiceId = toOptionalTrimmedString(formData.get("choiceId"));
-
-  if (!questionId) {
+  const submission = parseWithZod(formData, { schema: quizAnswerFormSchema });
+  if (submission.status !== "success") {
+    const selectedChoiceId = toOptionalTrimmedString(formData.get("choiceId"));
+    const choiceIdError = submission.error?.choiceId?.[0];
+    const questionIdError = submission.error?.questionId?.[0];
     return json<ActionData>(
       {
         ok: false,
-        message: "問題IDの取得に失敗しました。ページを再読み込みしてください。",
+        message: questionIdError ?? "入力内容を確認してください。",
+        selectedChoiceId,
+        fieldErrors: {
+          choiceId: choiceIdError,
+        },
       },
       { status: 400 },
     );
   }
-
-  if (!selectedChoiceId) {
-    return json<ActionData>(
-      {
-        ok: false,
-        message: "選択肢を選んでください。",
-        fieldErrors: { choiceId: "回答は必須です。" },
-      },
-      { status: 400 },
-    );
-  }
+  const questionId = submission.value.questionId;
+  const selectedChoiceId = submission.value.choiceId;
 
   try {
     const result = await submitAnswer({
@@ -158,7 +151,7 @@ export async function action({ request }: ActionFunctionArgs) {
         requestId: normalized.requestId,
         selectedChoiceId,
         fieldErrors: {
-          choiceId: resolveChoiceFieldError(normalized.fieldErrors),
+          choiceId: resolveQuizChoiceFieldError(normalized.fieldErrors),
         },
       },
       {

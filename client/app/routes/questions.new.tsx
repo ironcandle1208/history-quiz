@@ -9,7 +9,12 @@ import { json } from "@remix-run/node";
 import { Form, useActionData, useNavigation } from "@remix-run/react";
 
 import { createQuestion } from "../grpc/question.server";
-import { QUESTION_CHOICES_COUNT, type CreateQuestionFormValue, createQuestionFormSchema } from "../schemas/question";
+import {
+  QUESTION_CHOICES_COUNT,
+  type CreateQuestionFormValue,
+  createQuestionFormSchema,
+  toQuestionConformFieldErrors,
+} from "../schemas/question";
 import { requireAuthenticatedUser } from "../services/auth.server";
 import { normalizeGrpcHttpError } from "../services/grpc-error.server";
 
@@ -23,50 +28,6 @@ type ActionData = {
   requestId?: string;
   submissionResult?: SubmissionResult<string[]>;
 };
-
-const CHOICE_FIELD_WITH_INDEX_PATTERN = /^draft\.choices\[(\d+)\]$/;
-const CHOICE_FIELD_WITH_INDEX_FALLBACK_PATTERN = /^choices\[(\d+)\]$/;
-
-// mapGrpcFieldToConformField はバックエンド由来の field 名を conform 側の name に揃える。
-function mapGrpcFieldToConformField(field: string): string | null {
-  switch (field) {
-    case "draft.prompt":
-    case "prompt":
-      return "prompt";
-    case "draft.choices":
-    case "choices":
-      return "choices";
-    case "draft.correct_ordinal":
-    case "draft.correctOrdinal":
-    case "correct_ordinal":
-    case "correctOrdinal":
-      return "correctOrdinal";
-    case "draft.explanation":
-    case "explanation":
-      return "explanation";
-    default: {
-      const indexedChoiceMatch =
-        field.match(CHOICE_FIELD_WITH_INDEX_PATTERN) ?? field.match(CHOICE_FIELD_WITH_INDEX_FALLBACK_PATTERN);
-      if (indexedChoiceMatch) {
-        return `choices[${indexedChoiceMatch[1]}]`;
-      }
-      return null;
-    }
-  }
-}
-
-// toConformFieldErrors は gRPC fieldErrors を conform.reply 形式へ変換する。
-function toConformFieldErrors(fieldErrors: Record<string, string>): Record<string, string[]> {
-  const converted: Record<string, string[]> = {};
-  for (const [field, message] of Object.entries(fieldErrors)) {
-    const mappedField = mapGrpcFieldToConformField(field);
-    if (!mappedField) {
-      continue;
-    }
-    converted[mappedField] = [message];
-  }
-  return converted;
-}
 
 // loader は未認証アクセスをログインへリダイレクトさせる。
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -129,7 +90,7 @@ export async function action({ request }: ActionFunctionArgs) {
       error,
       fallbackMessage: "問題の保存に失敗しました。時間をおいて再試行してください。",
     });
-    const convertedFieldErrors = toConformFieldErrors(normalized.fieldErrors);
+    const convertedFieldErrors = toQuestionConformFieldErrors(normalized.fieldErrors);
 
     return json<ActionData>(
       {

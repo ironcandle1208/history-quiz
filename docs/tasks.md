@@ -237,7 +237,7 @@
   - _Requirements: 8.1-8.3, 9.4_
   - _Prompt: Role: Remix Developer | Task: Implement edit route with loader (GetMyQuestion) and action (UpdateQuestion); show field errors and success result | Restrictions: Must enforce auth; handle PERMISSION_DENIED gracefully | Success: Owners can edit; non-owners get 403-equivalent UX_
 
-- [ ] 26. Remix の入力検証スキーマを整備し、フォームのエラー表現を統一する
+- [x] 26. Remix の入力検証スキーマを整備し、フォームのエラー表現を統一する
   - File: `client/app/schemas/*`（新規/整理）
   - Purpose: `zod` + `conform` を前提に、バリデーションの重複と表示揺れを減らす
   - _Leverage: `docs/tech.md`（Validation）, `docs/structure.md`（schemas）_

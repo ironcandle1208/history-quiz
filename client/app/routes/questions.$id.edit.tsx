@@ -19,7 +19,12 @@ import {
 import { createRequestId } from "../grpc/client.server";
 import type { QuestionDetail } from "../grpc/question.server";
 import { getMyQuestion, updateQuestion } from "../grpc/question.server";
-import { QUESTION_CHOICES_COUNT, type CreateQuestionFormValue, createQuestionFormSchema } from "../schemas/question";
+import {
+  QUESTION_CHOICES_COUNT,
+  type CreateQuestionFormValue,
+  createQuestionFormSchema,
+  toQuestionConformFieldErrors,
+} from "../schemas/question";
 import { requireAuthenticatedUser } from "../services/auth.server";
 import { normalizeGrpcHttpError, throwGrpcErrorResponse } from "../services/grpc-error.server";
 
@@ -40,9 +45,6 @@ type ActionData = {
   requestId?: string;
   submissionResult?: SubmissionResult<string[]>;
 };
-
-const CHOICE_FIELD_WITH_INDEX_PATTERN = /^draft\.choices\[(\d+)\]$/;
-const CHOICE_FIELD_WITH_INDEX_FALLBACK_PATTERN = /^choices\[(\d+)\]$/;
 
 // resolveRequiredQuestionId は URL パラメータの問題IDを検証し、空値を拒否する。
 function resolveRequiredQuestionId(id: string | undefined): string {
@@ -76,47 +78,6 @@ function toInitialFormValues(question: QuestionDetail): CreateQuestionFormValue 
     correctOrdinal,
     explanation: question.explanation ?? "",
   };
-}
-
-// mapGrpcFieldToConformField はバックエンド由来の field 名を conform 側の name に揃える。
-function mapGrpcFieldToConformField(field: string): string | null {
-  switch (field) {
-    case "draft.prompt":
-    case "prompt":
-      return "prompt";
-    case "draft.choices":
-    case "choices":
-      return "choices";
-    case "draft.correct_ordinal":
-    case "draft.correctOrdinal":
-    case "correct_ordinal":
-    case "correctOrdinal":
-      return "correctOrdinal";
-    case "draft.explanation":
-    case "explanation":
-      return "explanation";
-    default: {
-      const indexedChoiceMatch =
-        field.match(CHOICE_FIELD_WITH_INDEX_PATTERN) ?? field.match(CHOICE_FIELD_WITH_INDEX_FALLBACK_PATTERN);
-      if (indexedChoiceMatch) {
-        return `choices[${indexedChoiceMatch[1]}]`;
-      }
-      return null;
-    }
-  }
-}
-
-// toConformFieldErrors は gRPC fieldErrors を conform.reply 形式へ変換する。
-function toConformFieldErrors(fieldErrors: Record<string, string>): Record<string, string[]> {
-  const converted: Record<string, string[]> = {};
-  for (const [field, message] of Object.entries(fieldErrors)) {
-    const mappedField = mapGrpcFieldToConformField(field);
-    if (!mappedField) {
-      continue;
-    }
-    converted[mappedField] = [message];
-  }
-  return converted;
 }
 
 // loader は編集対象を取得し、フォーム初期値を返す。
@@ -218,7 +179,7 @@ export async function action({ params, request }: ActionFunctionArgs) {
       fallbackMessage: "問題の更新に失敗しました。時間をおいて再試行してください。",
       requestId,
     });
-    const convertedFieldErrors = toConformFieldErrors(normalized.fieldErrors);
+    const convertedFieldErrors = toQuestionConformFieldErrors(normalized.fieldErrors);
 
     return json<ActionData>(
       {
