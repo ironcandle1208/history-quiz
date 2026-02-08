@@ -198,7 +198,7 @@
   - _Requirements: 5.2_
   - _Prompt: Role: Full-stack Engineer | Task: Build server-only gRPC client wrapper for Remix that attaches userId/requestId metadata and exposes typed methods | Restrictions: Ensure no client-side import; handle deadlines/timeouts | Success: Loader/action can call backend via wrapper; metadata is propagated_
 
-- [ ] 21. gRPC→HTTP エラー変換（共通）を実装する
+- [x] 21. gRPC→HTTP エラー変換（共通）を実装する
   - File: `client/app/services/grpc-error.server.ts`（新規）
   - Purpose: `docs/tech.md` の変換表を単一の真実として適用し、全ルートで一貫したエラー表示にする
   - _Leverage: `docs/tech.md`（Error Handling Standards）_

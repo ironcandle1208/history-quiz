@@ -51,6 +51,19 @@ export type GrpcCallResult<TResponse> = {
   response: TResponse;
 };
 
+// GrpcCallError は gRPC 失敗時に requestId を保持して上位へ伝搬する。
+export class GrpcCallError extends Error {
+  public readonly grpcError: unknown;
+  public readonly requestId: string;
+
+  constructor(params: { grpcError: unknown; requestId: string }) {
+    super("gRPC 呼び出しに失敗しました。");
+    this.name = "GrpcCallError";
+    this.grpcError = params.grpcError;
+    this.requestId = params.requestId;
+  }
+}
+
 export type GrpcMetadata = {
   requestId: string;
   userId: string;
@@ -95,6 +108,11 @@ type LoadedGrpcPackage = {
 };
 
 let cachedClients: GrpcClients | null = null;
+
+// isGrpcCallError は unknown が GrpcCallError かどうかを判定する。
+export function isGrpcCallError(error: unknown): error is GrpcCallError {
+  return error instanceof GrpcCallError;
+}
 
 // assertServerOnly は Node.js 実行時以外で呼ばれた場合に例外を投げる。
 function assertServerOnly(): void {
@@ -286,7 +304,12 @@ function invokeUnary<TRequest extends RequestWithContext, TResponse>(params: {
   return new Promise((resolve, reject) => {
     params.method(requestWithContext, metadataObject, { deadline }, (error, response) => {
       if (error) {
-        reject(error);
+        reject(
+          new GrpcCallError({
+            grpcError: error,
+            requestId: normalizedCallContext.requestId,
+          }),
+        );
         return;
       }
 
