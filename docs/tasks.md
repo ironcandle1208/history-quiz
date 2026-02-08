@@ -205,7 +205,7 @@
   - _Requirements: 1.2, 3.3, 8.3, 9.3_
   - _Prompt: Role: Remix Backend-for-Frontend Engineer | Task: Implement helper to map gRPC status codes to HTTP responses and user-facing field errors; include requestId in response | Restrictions: Do not leak internal error details; keep mapping table consistent with docs | Success: All routes use common conversion; errors are consistent and debuggable_
 
-- [ ] 22. クイズ画面（取得→回答→判定→次へ）を実装する
+- [x] 22. クイズ画面（取得→回答→判定→次へ）を実装する
   - File: `client/app/routes/quiz.tsx`（実装）
   - Include:
     - loader: `GetQuestion`

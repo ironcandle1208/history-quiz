@@ -43,7 +43,7 @@ export type RequestWithContext = {
 export type GrpcCallContext = {
   requestId?: string;
   timeoutMs?: number;
-  userId: string;
+  userId?: string;
 };
 
 export type GrpcCallResult<TResponse> = {
@@ -66,7 +66,7 @@ export class GrpcCallError extends Error {
 
 export type GrpcMetadata = {
   requestId: string;
-  userId: string;
+  userId?: string;
 };
 
 type UnaryMethod<TRequest, TResponse> = (
@@ -245,7 +245,7 @@ export function createRequestId(): string {
 }
 
 // buildGrpcMetadata は gRPC metadata に入れる userId/requestId を構築する。
-export function buildGrpcMetadata(params: { requestId: string; userId: string }): GrpcMetadata {
+export function buildGrpcMetadata(params: { requestId: string; userId?: string }): GrpcMetadata {
   return {
     requestId: params.requestId,
     userId: params.userId,
@@ -255,22 +255,20 @@ export function buildGrpcMetadata(params: { requestId: string; userId: string })
 // createMetadataObject は gRPC 実呼び出し用の Metadata を作成する。
 function createMetadataObject(metadataValues: GrpcMetadata): Metadata {
   const metadata = new Metadata();
-  metadata.set(METADATA_KEY_USER_ID, metadataValues.userId);
+  // 未ログイン時は userId を空で送らず、キー自体を付与しない。
+  if (metadataValues.userId && metadataValues.userId.length > 0) {
+    metadata.set(METADATA_KEY_USER_ID, metadataValues.userId);
+  }
   metadata.set(METADATA_KEY_REQUEST_ID, metadataValues.requestId);
   return metadata;
 }
 
 // normalizeCallContext は callContext の必須値とデフォルト値を確定する。
 function normalizeCallContext(callContext: GrpcCallContext): { requestId: string; timeoutMs: number; userId: string } {
-  const normalizedUserId = callContext.userId.trim();
-  if (normalizedUserId.length === 0) {
-    throw new Error("gRPC 呼び出しには userId が必須です。");
-  }
-
   return {
     requestId: callContext.requestId ?? createRequestId(),
     timeoutMs: callContext.timeoutMs ?? resolveGrpcTimeoutMs(),
-    userId: normalizedUserId,
+    userId: callContext.userId?.trim() ?? "",
   };
 }
 
