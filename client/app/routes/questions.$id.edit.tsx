@@ -15,7 +15,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   const user = await requireAuthenticatedUser(request);
   const questionId = params.id;
   if (!questionId) {
-    return json({ message: "id が指定されていません。" }, { status: 400 });
+    throw json({ message: "id が指定されていません。" }, { status: 400 });
   }
 
   const data: LoaderData = { questionId, userId: user.userId };

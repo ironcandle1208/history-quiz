@@ -181,7 +181,7 @@
   - _Requirements: 9.4_
   - _Prompt: Role: Security-minded Remix Developer | Task: Implement secure cookie session storage and helper to require authenticated user; provide redirect to login | Restrictions: Do not store raw tokens in client JS; set secure cookie flags appropriately | Success: Protected routes require login; userId accessible in server loaders/actions_
 
-- [ ] 19. Authentik（OIDC）連携を実装する（ログイン/コールバック）
+- [x] 19. Authentik（OIDC）連携を実装する（ログイン/コールバック）
   - File: `client/app/routes/login.tsx`, `client/app/routes/auth.callback.tsx`（新規想定）
   - Purpose: 要件9のログイン機能を実現し、OIDC の `sub` をアプリ内 userId に紐付ける
   - _Leverage: `docs/tech.md`（Authentik/OIDC）, `infra/authentik/*`_
