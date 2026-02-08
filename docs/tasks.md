@@ -244,7 +244,7 @@
   - _Requirements: 3.3, 8.3, 9.3_
   - _Prompt: Role: Frontend Architect | Task: Create consistent zod schemas for quiz answer and question forms and unify error mapping | Restrictions: Keep schemas server-side authoritative; avoid duplicating backend invariants too deeply | Success: All forms share common validation patterns and messages_
 
-- [ ] 27. Remix↔Backend の統合テスト（主要フロー）を追加する
+- [x] 27. Remix↔Backend の統合テスト（主要フロー）を追加する
   - File: `client/app/tests/integration/*.test.ts`（新規）
   - Scenarios:
     - 出題→回答→次へ
