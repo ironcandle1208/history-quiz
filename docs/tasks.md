@@ -223,7 +223,7 @@
   - _Requirements: 3.1-3.3, 9.4_
   - _Prompt: Role: Remix Developer | Task: Build question creation form with zod+conform, call CreateQuestion via gRPC, and display success/error | Restrictions: Validate all required fields; keep server-side authoritative | Success: Users can create questions; missing fields show per-field errors_
 
-- [ ] 24. マイページ（履歴/正答率/自作問題一覧/空状態）を実装する
+- [x] 24. マイページ（履歴/正答率/自作問題一覧/空状態）を実装する
   - File: `client/app/routes/me.tsx`（実装）
   - Purpose: 要件6/7の可視化を提供し、継続学習を支える
   - _Leverage: `docs/requirements.md`（6,7）, `docs/product.md`（Key Features）_
