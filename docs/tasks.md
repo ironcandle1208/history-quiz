@@ -216,7 +216,7 @@
   - _Requirements: 1.1-1.4, 2.1-2.2_
   - _Prompt: Role: Remix Developer (Forms/UX) | Task: Implement quiz route with loader/action calling gRPC; show immediate correctness and next question action | Restrictions: Use zod+conform for validation; handle loading/error states | Success: Users can answer and see correctness, then proceed to next question_
 
-- [ ] 23. 問題作成（フォーム/バリデーション/保存結果）を実装する
+- [x] 23. 問題作成（フォーム/バリデーション/保存結果）を実装する
   - File: `client/app/routes/questions.new.tsx`（新規想定）, `client/app/schemas/question.ts`（新規）
   - Purpose: 要件3の作問フローを完成させる
   - _Leverage: `docs/tech.md`（zod+conform）, `docs/requirements.md`（3）_

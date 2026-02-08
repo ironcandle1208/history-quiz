@@ -1,73 +1,263 @@
 // 問題作成画面。
-// zod + conform による入力検証を前提に、サーバー側で最終バリデーションを行う。
+// zod + conform を使った入力検証と gRPC(CreateQuestion) 呼び出しを扱う。
 
+import type { SubmissionResult } from "@conform-to/react";
+import { getCollectionProps, getFormProps, getInputProps, getTextareaProps, useForm } from "@conform-to/react";
+import { getZodConstraint, parseWithZod } from "@conform-to/zod";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Form, useActionData } from "@remix-run/react";
+import { Form, useActionData, useNavigation } from "@remix-run/react";
 
+import { createQuestion } from "../grpc/question.server";
+import { QUESTION_CHOICES_COUNT, type CreateQuestionFormValue, createQuestionFormSchema } from "../schemas/question";
 import { requireAuthenticatedUser } from "../services/auth.server";
+import { normalizeGrpcHttpError } from "../services/grpc-error.server";
 
-// loader は現時点では不要だが、Remix のルーティング骨格として用意しておく。
-export async function loader({ request }: LoaderFunctionArgs) {
-  const user = await requireAuthenticatedUser(request);
-  return json({ ok: true, userId: user.userId });
+type ActionData = {
+  ok: boolean;
+  message?: string;
+  question?: {
+    id: string;
+    prompt: string;
+  };
+  requestId?: string;
+  submissionResult?: SubmissionResult<string[]>;
+};
+
+const CHOICE_FIELD_WITH_INDEX_PATTERN = /^draft\.choices\[(\d+)\]$/;
+const CHOICE_FIELD_WITH_INDEX_FALLBACK_PATTERN = /^choices\[(\d+)\]$/;
+
+// mapGrpcFieldToConformField はバックエンド由来の field 名を conform 側の name に揃える。
+function mapGrpcFieldToConformField(field: string): string | null {
+  switch (field) {
+    case "draft.prompt":
+    case "prompt":
+      return "prompt";
+    case "draft.choices":
+    case "choices":
+      return "choices";
+    case "draft.correct_ordinal":
+    case "draft.correctOrdinal":
+    case "correct_ordinal":
+    case "correctOrdinal":
+      return "correctOrdinal";
+    case "draft.explanation":
+    case "explanation":
+      return "explanation";
+    default: {
+      const indexedChoiceMatch =
+        field.match(CHOICE_FIELD_WITH_INDEX_PATTERN) ?? field.match(CHOICE_FIELD_WITH_INDEX_FALLBACK_PATTERN);
+      if (indexedChoiceMatch) {
+        return `choices[${indexedChoiceMatch[1]}]`;
+      }
+      return null;
+    }
+  }
 }
 
-type ActionData =
-  | { ok: true; prompt: string; userId: string }
-  | { ok: false; message: string; fieldErrors?: { prompt?: string } };
+// toConformFieldErrors は gRPC fieldErrors を conform.reply 形式へ変換する。
+function toConformFieldErrors(fieldErrors: Record<string, string>): Record<string, string[]> {
+  const converted: Record<string, string[]> = {};
+  for (const [field, message] of Object.entries(fieldErrors)) {
+    const mappedField = mapGrpcFieldToConformField(field);
+    if (!mappedField) {
+      continue;
+    }
+    converted[mappedField] = [message];
+  }
+  return converted;
+}
 
-// action は「問題作成」のフォーム送信を受ける。
-// NOTE: 後続タスクで zod+conform + gRPC(CreateQuestion) に置き換える。
+// loader は未認証アクセスをログインへリダイレクトさせる。
+export async function loader({ request }: LoaderFunctionArgs) {
+  await requireAuthenticatedUser(request);
+  return json({ ok: true });
+}
+
+// action は問題作成フォームの入力検証と保存処理を実行する。
 export async function action({ request }: ActionFunctionArgs) {
   const user = await requireAuthenticatedUser(request);
   const formData = await request.formData();
-  const prompt = formData.get("prompt");
+  const submission = parseWithZod(formData, { schema: createQuestionFormSchema });
 
-  if (typeof prompt !== "string" || prompt.trim().length === 0) {
+  if (submission.status !== "success") {
     return json<ActionData>(
-      { ok: false, message: "入力内容を確認してください。", fieldErrors: { prompt: "問題文は必須です。" } },
+      {
+        ok: false,
+        message: "入力内容を確認してください。",
+        submissionResult: submission.reply(),
+      },
       { status: 400 },
     );
   }
 
-  return json<ActionData>({ ok: true, prompt: prompt.trim(), userId: user.userId });
+  try {
+    const result = await createQuestion({
+      callContext: { userId: user.userId },
+      request: {
+        draft: {
+          prompt: submission.value.prompt,
+          choices: submission.value.choices,
+          correctOrdinal: submission.value.correctOrdinal,
+          explanation: submission.value.explanation,
+        },
+      },
+    });
+    const createdQuestion = result.response.question;
+    if (!createdQuestion || createdQuestion.id.length === 0) {
+      throw new Error("作成結果の問題IDが取得できませんでした。");
+    }
+
+    return json<ActionData>(
+      {
+        ok: true,
+        question: {
+          id: createdQuestion.id,
+          prompt: createdQuestion.prompt,
+        },
+        requestId: result.requestId,
+        submissionResult: submission.reply({ resetForm: true }),
+      },
+      {
+        headers: {
+          "x-request-id": result.requestId,
+        },
+      },
+    );
+  } catch (error) {
+    const normalized = normalizeGrpcHttpError({
+      error,
+      fallbackMessage: "問題の保存に失敗しました。時間をおいて再試行してください。",
+    });
+    const convertedFieldErrors = toConformFieldErrors(normalized.fieldErrors);
+
+    return json<ActionData>(
+      {
+        ok: false,
+        message: normalized.payload.error.message,
+        requestId: normalized.requestId,
+        submissionResult: submission.reply({
+          formErrors: [normalized.payload.error.message],
+          fieldErrors: convertedFieldErrors,
+        }),
+      },
+      {
+        status: normalized.httpStatus,
+        headers: normalized.requestId ? { "x-request-id": normalized.requestId } : undefined,
+      },
+    );
+  }
 }
 
 export default function QuestionsNewRoute() {
   const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting" && navigation.formMethod === "post";
+
+  const [form, fields] = useForm<CreateQuestionFormValue>({
+    constraint: getZodConstraint(createQuestionFormSchema),
+    lastResult: actionData?.submissionResult,
+    onValidate({ formData }) {
+      return parseWithZod(formData, { schema: createQuestionFormSchema });
+    },
+    shouldRevalidate: "onInput",
+    shouldValidate: "onBlur",
+  });
+
+  const choiceFields = fields.choices.getFieldList();
+  const correctOrdinalOptions = getCollectionProps(fields.correctOrdinal, {
+    type: "radio",
+    options: choiceFields.map((_, index) => String(index)),
+  });
 
   return (
     <section className="card">
       <h1>問題作成</h1>
-      <p className="muted">この画面は後続タスクで入力検証と gRPC 呼び出しを追加します。</p>
+      <p className="muted">
+        問題文・選択肢4件・正解を入力して保存します（作成者本人のデータとして保存されます）。
+      </p>
 
-      <Form method="post">
+      <Form method="post" {...getFormProps(form)}>
         <label style={{ display: "block" }}>
           問題文
-          <input
-            type="text"
-            name="prompt"
-            aria-invalid={actionData?.ok === false && actionData.fieldErrors?.prompt ? true : undefined}
-            aria-errormessage={actionData?.ok === false && actionData.fieldErrors?.prompt ? "prompt-error" : undefined}
-            style={{ display: "block", width: "100%", marginTop: 6 }}
-          />
+          <input {...getInputProps(fields.prompt, { type: "text" })} style={{ display: "block", marginTop: 6, width: "100%" }} />
         </label>
-
-        {actionData?.ok === false && actionData.fieldErrors?.prompt ? (
-          <p id="prompt-error" style={{ color: "#ffb4b4" }}>
-            {actionData.fieldErrors.prompt}
+        {fields.prompt.errors?.[0] ? (
+          <p id={fields.prompt.errorId} style={{ color: "#ffb4b4" }}>
+            {fields.prompt.errors[0]}
           </p>
         ) : null}
 
-        <button type="submit" style={{ marginTop: 12 }}>
-          保存（仮）
+        <fieldset style={{ border: "none", margin: "12px 0 0", padding: 0 }}>
+          <legend className="muted">選択肢（{QUESTION_CHOICES_COUNT}件）</legend>
+          {fields.choices.errors?.[0] ? (
+            <p id={fields.choices.errorId} style={{ color: "#ffb4b4" }}>
+              {fields.choices.errors[0]}
+            </p>
+          ) : null}
+
+          {choiceFields.map((choiceField, index) => (
+            <div key={choiceField.key} style={{ marginTop: 8 }}>
+              <label style={{ display: "block" }}>
+                選択肢 {index + 1}
+                <input
+                  {...getInputProps(choiceField, { type: "text" })}
+                  style={{ display: "block", marginTop: 6, width: "100%" }}
+                />
+              </label>
+              {choiceField.errors?.[0] ? (
+                <p id={choiceField.errorId} style={{ color: "#ffb4b4" }}>
+                  {choiceField.errors[0]}
+                </p>
+              ) : null}
+            </div>
+          ))}
+        </fieldset>
+
+        <fieldset style={{ border: "none", margin: "12px 0 0", padding: 0 }}>
+          <legend className="muted">正解</legend>
+          {correctOrdinalOptions.map((option, index) => (
+            <label key={option.key} style={{ display: "block", marginTop: 4 }}>
+              <input {...option} /> 選択肢 {index + 1}
+            </label>
+          ))}
+        </fieldset>
+        {fields.correctOrdinal.errors?.[0] ? (
+          <p id={fields.correctOrdinal.errorId} style={{ color: "#ffb4b4" }}>
+            {fields.correctOrdinal.errors[0]}
+          </p>
+        ) : null}
+
+        <label style={{ display: "block", marginTop: 12 }}>
+          解説（任意）
+          <textarea {...getTextareaProps(fields.explanation)} rows={4} style={{ display: "block", marginTop: 6, width: "100%" }} />
+        </label>
+        {fields.explanation.errors?.[0] ? (
+          <p id={fields.explanation.errorId} style={{ color: "#ffb4b4" }}>
+            {fields.explanation.errors[0]}
+          </p>
+        ) : null}
+
+        <button type="submit" style={{ marginTop: 12 }} disabled={isSubmitting}>
+          {isSubmitting ? "保存中..." : "保存する"}
         </button>
       </Form>
 
-      {actionData?.ok === true ? (
-        <p>
-          保存しました（仮）：<code>{actionData.prompt}</code> / user: <code>{actionData.userId}</code>
+      {form.errors?.[0] ? <p style={{ color: "#ffb4b4" }}>{form.errors[0]}</p> : null}
+
+      {actionData?.ok === false && actionData.message && !form.errors?.[0] ? (
+        <p style={{ color: "#ffb4b4" }}>{actionData.message}</p>
+      ) : null}
+
+      {actionData?.ok === true && actionData.question ? (
+        <p style={{ color: "#9ce69c" }}>
+          保存しました：<code>{actionData.question.prompt}</code>（ID: <code>{actionData.question.id}</code>）
+        </p>
+      ) : null}
+
+      {actionData?.requestId ? (
+        <p className="muted">
+          requestId: <code>{actionData.requestId}</code>
         </p>
       ) : null}
     </section>
