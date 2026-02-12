@@ -118,3 +118,51 @@ docker stop history-quiz-postgres
 ```bash
 docker rm -f history-quiz-postgres
 ```
+
+## トラブルシューティング
+
+### Authentik 起動時に `password authentication failed for user "authentik"` が出る
+- 症状例:
+  - `password authentication failed for user "authentik"`
+  - `Connection matched file "/var/lib/postgresql/data/pg_hba.conf" ... "host all all all scram-sha-256"`
+- 主な原因:
+  - `infra/authentik/.env` の `AUTHENTIK_POSTGRES_PASSWORD` を変更したが、既存の Postgres ボリュームには変更前パスワードが残っている。
+- 対処（Authentik のローカルデータを破棄して再初期化する場合）:
+```bash
+docker compose --env-file infra/authentik/.env -f infra/authentik/docker-compose.yml down -v
+docker compose --env-file infra/authentik/.env -f infra/authentik/docker-compose.yml up -d
+```
+- 補足:
+  - `down -v` は Authentik 用の Postgres/Redis/Media ボリュームを削除するため、ローカルの Authentik データは消える。
+  - データを残したい場合は、`infra/authentik/.env` を過去の値に戻すか、既存 DB 側のユーザーパスワードを現在値へ変更する。
+
+### `AUTHENTIK_BOOTSTRAP_EMAIL` / `AUTHENTIK_BOOTSTRAP_PASSWORD` でログインできない
+- 症状例:
+  - `AUTHENTIK_BOOTSTRAP_PASSWORD` を入力しても `invalid password` になる。
+- 主な原因:
+  - `AUTHENTIK_BOOTSTRAP_EMAIL` / `AUTHENTIK_BOOTSTRAP_PASSWORD` は DB 初回初期化時の管理者作成にだけ使われる。
+  - 既存 DB がある状態では、`.env` の bootstrap 値を変更しても既存管理者のログイン情報は更新されない。
+- 切り分け:
+  - サービス状態を確認する。
+```bash
+docker compose --env-file infra/authentik/.env -f infra/authentik/docker-compose.yml ps
+```
+  - `server` ログで `Invalid credentials` が出ているか確認する。
+```bash
+docker compose --env-file infra/authentik/.env -f infra/authentik/docker-compose.yml logs --tail=200 server
+```
+  - 既存ユーザー（username/email）を確認する。
+```bash
+docker compose --env-file infra/authentik/.env -f infra/authentik/docker-compose.yml exec -T server ak shell -c "from authentik.core.models import User; print(list(User.objects.values_list('username','email')[:20]))"
+```
+- 対処（既存データを保持する場合）:
+  - 既存の管理者ユーザー（例: `akadmin`）のパスワードを再設定する。
+```bash
+docker compose --env-file infra/authentik/.env -f infra/authentik/docker-compose.yml exec server ak changepassword akadmin
+```
+- 対処（bootstrap 値を再適用したい場合）:
+  - ボリュームを削除して再初期化する。
+```bash
+docker compose --env-file infra/authentik/.env -f infra/authentik/docker-compose.yml down -v
+docker compose --env-file infra/authentik/.env -f infra/authentik/docker-compose.yml up -d
+```
