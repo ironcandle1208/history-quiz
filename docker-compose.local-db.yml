@@ -1,0 +1,21 @@
+services:
+  app-postgres:
+    # Phase1 のローカル開発で使うアプリDB。Authentik 用 DB とライフサイクルを分離する。
+    image: postgres:16
+    container_name: history-quiz-postgres
+    environment:
+      POSTGRES_USER: historyquiz
+      POSTGRES_PASSWORD: historyquiz
+      POSTGRES_DB: historyquiz
+    ports:
+      - "5432:5432"
+    volumes:
+      - history_quiz_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U historyquiz -d historyquiz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  history_quiz_postgres_data:

@@ -62,40 +62,35 @@ docker compose --env-file infra/authentik/.env -f infra/authentik/docker-compose
 
 ## 2. アプリDB（Postgres）を用意する
 Phase1 では、Neon 本番利用のローカル代替としてローカル Postgres を使う。
+リポジトリ直下の `Makefile` に短縮コマンド（`db-setup/db-up/db-down/db-reset`）を用意している。
 
-1. ローカル Postgres を起動する。
+1. アプリDB のセットアップを一括実行する。
 ```bash
-docker run --name history-quiz-postgres \
-  -e POSTGRES_USER=historyquiz \
-  -e POSTGRES_PASSWORD=historyquiz \
-  -e POSTGRES_DB=historyquiz \
-  -p 5432:5432 \
-  -d postgres:16
+make db-setup
 ```
 
-2. `DATABASE_URL` を設定する。
-```bash
-export DATABASE_URL='postgresql://historyquiz:historyquiz@127.0.0.1:5432/historyquiz?sslmode=disable'
-```
-
-3. マイグレーションを順番に適用する。
-```bash
-for f in backend/db/migrations/*.sql; do
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
-done
-```
+2. `make db-setup` で実行される内容:
+- `backend/.env` が無ければ `backend/.env.example` から作成
+- `make db-up` でローカル Postgres を起動
+- `backend/.env` を読み込んで `DATABASE_URL` を設定
+- `backend/db/migrations/*.sql` を順番に適用
 
 ### Neon を使う場合
-- `DATABASE_URL` を Neon 接続文字列に差し替える。
+- `backend/.env` の `DATABASE_URL` を Neon 接続文字列に差し替える。
 - マイグレーション適用コマンドは同じ。
 
 ## 3. Backend（Go / gRPC）を起動する
-1. `DATABASE_URL` が設定済みであることを確認する。
+1. `backend/.env` を shell に読み込む。
+```bash
+set -a
+source backend/.env
+set +a
+```
 
 2. 起動する。
 ```bash
 cd backend
-PORT=50051 go run ./cmd/server
+go run ./cmd/server
 ```
 
 3. ログに `gRPC server listening on :50051` が出れば起動成功。
@@ -144,12 +139,12 @@ docker compose --env-file infra/authentik/.env -f infra/authentik/docker-compose
 
 - ローカル Postgres 停止:
 ```bash
-docker stop history-quiz-postgres
+make db-down
 ```
 
 - ローカル Postgres 削除（データも破棄する場合のみ）:
 ```bash
-docker rm -f history-quiz-postgres
+make db-reset
 ```
 
 ## トラブルシューティング
