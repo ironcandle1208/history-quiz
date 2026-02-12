@@ -93,18 +93,17 @@ make backend-run
 3. ログに `gRPC server listening on :50051` が出れば起動成功。
 
 ## 4. Client（Remix）を起動する
-1. 依存関係をインストールする。
+1. 起動する。
 ```bash
-cd client
-pnpm install
+make client-run
 ```
 
-2. 環境変数ファイルを作成する。
-```bash
-cp .env.example .env
-```
+2. `make client-run` で実行される内容:
+- `client/.env` が無ければ `client/.env.example` から作成
+- `client` の依存関係を `pnpm install` でインストール
+- `client` で `pnpm dev` を実行
 
-3. `.env` を開き、以下を環境に合わせて設定する。
+3. 初回で `client/.env` が作成された場合は、以下を環境に合わせて設定する。
 - `OIDC_ISSUER_URL`: `http://localhost:9000/application/o/<your-provider-slug>`
 - `OIDC_CLIENT_ID`: Authentik Provider で発行された Client ID
 - `OIDC_CLIENT_SECRET`: Authentik Provider で発行された Client Secret
@@ -115,12 +114,7 @@ cp .env.example .env
 - `BACKEND_GRPC_TLS`: `false`
 - `GRPC_PROTO_ROOT`: `../proto`
 
-4. 起動する。
-```bash
-pnpm dev
-```
-
-5. `http://localhost:3000` へアクセスする。
+4. `http://localhost:3000` へアクセスする。
 
 ## 5. 動作確認（最小）
 1. `http://localhost:3000/login` へアクセスして Authentik ログインを完了する。
