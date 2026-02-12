@@ -80,18 +80,15 @@ make db-setup
 - マイグレーション適用コマンドは同じ。
 
 ## 3. Backend（Go / gRPC）を起動する
-1. `backend/.env` を shell に読み込む。
+1. 起動する。
 ```bash
-set -a
-source backend/.env
-set +a
+make backend-run
 ```
 
-2. 起動する。
-```bash
-cd backend
-go run ./cmd/server
-```
+2. `make backend-run` で実行される内容:
+- `backend/.env` が無ければ `backend/.env.example` から作成
+- `backend/.env` を読み込み、`DATABASE_URL` を環境変数として設定
+- `backend/cmd/server` を `go run` で起動
 
 3. ログに `gRPC server listening on :50051` が出れば起動成功。
 

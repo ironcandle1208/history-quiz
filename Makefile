@@ -1,4 +1,4 @@
-.PHONY: help db-setup db-up db-down db-reset
+.PHONY: help db-setup db-up db-down db-reset backend-run
 
 # アプリDB 用 docker compose ファイルのパスを定義する。
 LOCAL_DB_COMPOSE_FILE := docker-compose.local-db.yml
@@ -12,6 +12,7 @@ help:
 	@echo "  make db-up    # ローカルのアプリDB(Postgres)を起動"
 	@echo "  make db-down  # ローカルのアプリDB(Postgres)を停止（データ保持）"
 	@echo "  make db-reset # ローカルのアプリDB(Postgres)を停止し、ボリュームも削除"
+	@echo "  make backend-run # backend/.env 読み込み後に Go gRPC サーバーを起動"
 
 db-setup:
 	# アプリDBの起動、環境変数ファイル準備、マイグレーション適用を一括実行する。
@@ -28,3 +29,7 @@ db-down:
 db-reset:
 	# ローカル開発用のアプリDBを停止し、ボリュームも削除して初期化する。
 	@$(DOCKER_COMPOSE) -f $(LOCAL_DB_COMPOSE_FILE) down -v
+
+backend-run:
+	# backend 環境変数の読み込みと gRPC サーバー起動を一括実行する。
+	@./scripts/run_backend_grpc_server.sh
