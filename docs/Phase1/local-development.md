@@ -27,11 +27,38 @@ docker compose --env-file infra/authentik/.env -f infra/authentik/docker-compose
 - URL: `http://localhost:9000/if/admin/`
 - 初期管理者: `infra/authentik/.env` の `AUTHENTIK_BOOTSTRAP_EMAIL` / `AUTHENTIK_BOOTSTRAP_PASSWORD`
 
-5. Authentik 管理画面で OIDC Provider / Application を作成し、以下を控える。
-- Issuer URL（Provider 画面に表示される値）
+5. Authentik 管理画面で OIDC Provider / Application を作成する。
+1. OIDC Provider を作成する。
+- 画面: `Applications` → `Providers` → `Create` → `OAuth2/OpenID Provider`
+- ローカル開発での推奨設定例:
+  - Name: `history-quiz-local-provider`
+  - Authorization flow: `default-provider-authorization-implicit-consent`
+  - Client type: `Confidential`
+  - Redirect URIs/Origins: `http://localhost:3000/auth/callback`
+  - Signing Key: 既定値（変更しない）
+- 補足:
+  - ローカルでは同意画面を省略するため `implicit-consent` を推奨。
+  - 本番では `default-provider-authorization-explicit-consent` の採用を検討する。
+
+2. Provider 作成後に以下を控える。
+- Provider slug（例: `history-quiz-local-provider`）
 - Client ID
 - Client Secret
-- Redirect URI: `http://localhost:3000/auth/callback`
+- Issuer URL（例: `http://localhost:9000/application/o/history-quiz-local-provider`）
+
+3. Application を作成する。
+- 画面: `Applications` → `Applications` → `Create`
+- 推奨設定例:
+  - Name: `history-quiz-local`
+  - Slug: `history-quiz-local`
+  - Provider: 手順 5-1 で作成した Provider を選択
+  - Launch URL: `http://localhost:3000/`
+
+4. Remix 側の環境変数に反映する。
+- `OIDC_ISSUER_URL`: `http://localhost:9000/application/o/<provider-slug>`
+- `OIDC_CLIENT_ID`: Provider で発行された Client ID
+- `OIDC_CLIENT_SECRET`: Provider で発行された Client Secret
+- `OIDC_REDIRECT_URI`: `http://localhost:3000/auth/callback`
 
 ## 2. アプリDB（Postgres）を用意する
 Phase1 では、Neon 本番利用のローカル代替としてローカル Postgres を使う。
@@ -80,22 +107,28 @@ cd client
 pnpm install
 ```
 
-2. 環境変数を設定して起動する。
+2. 環境変数ファイルを作成する。
 ```bash
-SESSION_SECRET='dev-only-session-secret-change-me' \
-OIDC_ISSUER_URL='http://localhost:9000/application/o/<your-provider-slug>' \
-OIDC_CLIENT_ID='<your-client-id>' \
-OIDC_CLIENT_SECRET='<your-client-secret>' \
-OIDC_REDIRECT_URI='http://localhost:3000/auth/callback' \
-OIDC_SCOPES='openid profile email' \
-BACKEND_GRPC_ADDRESS='127.0.0.1:50051' \
-BACKEND_GRPC_TIMEOUT_MS='3000' \
-BACKEND_GRPC_TLS='false' \
-GRPC_PROTO_ROOT='../proto' \
+cp .env.example .env
+```
+
+3. `.env` を開き、以下を環境に合わせて設定する。
+- `OIDC_ISSUER_URL`: `http://localhost:9000/application/o/<your-provider-slug>`
+- `OIDC_CLIENT_ID`: Authentik Provider で発行された Client ID
+- `OIDC_CLIENT_SECRET`: Authentik Provider で発行された Client Secret
+- `OIDC_REDIRECT_URI`: `http://localhost:3000/auth/callback`
+- `OIDC_SCOPES`: `openid profile email`
+- `BACKEND_GRPC_ADDRESS`: `127.0.0.1:50051`
+- `BACKEND_GRPC_TIMEOUT_MS`: `3000`
+- `BACKEND_GRPC_TLS`: `false`
+- `GRPC_PROTO_ROOT`: `../proto`
+
+4. 起動する。
+```bash
 pnpm dev
 ```
 
-3. `http://localhost:3000` へアクセスする。
+5. `http://localhost:3000` へアクセスする。
 
 ## 5. 動作確認（最小）
 1. `http://localhost:3000/login` へアクセスして Authentik ログインを完了する。
