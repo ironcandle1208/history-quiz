@@ -279,3 +279,51 @@
   - _Leverage: `docs/tech.md`（Security, Threat Model）, `docs/design.md`（Error Handling）_
   - _Requirements: 9.4_
   - _Prompt: Role: Security Reviewer | Task: Create a practical checklist and ensure implementation aligns with it (session, OIDC, ownership checks, validation) | Restrictions: Checklist must be actionable; no vague items | Success: Checklist exists and can be used for pre-release review_
+
+---
+
+## Phase2 Planned Tasks
+
+- [ ] 31. CSRF トークンを導入し、状態変更系の全 POST を保護する
+  - File: `client/app/services/csrf.server.ts`（新規）, `client/app/routes/**/*.tsx`（対象 action を更新）, `docs/Phase2/csrf-rollout.md`（新規）
+  - Include:
+    - セッション単位の CSRF トークン発行/検証
+    - 共通 hidden input ヘルパーの提供
+    - 失敗時の 403 応答と requestId を含むエラー整形
+  - Purpose: Phase1 で「追加対応候補」となっていた CSRF 防御を明示的に実装し、状態変更操作の安全性を引き上げる
+  - _Leverage: `docs/Phase1/security-checklist.md`, `docs/tech.md`（Security, Error Handling）_
+  - _Requirements: 9.4_
+  - _Prompt: Role: Security-focused Remix Engineer | Task: Add server-side CSRF token issue/verify flow and enforce it for all state-changing actions | Restrictions: Keep tokens server authoritative; do not break existing form UX | Success: Protected routes reject missing/invalid token with consistent 403 handling_
+
+- [ ] 32. DB マイグレーション運用を確定する（ローカル/CI/本番）
+  - File: `docs/Phase1/decisions.md`（更新）, `docs/Phase2/migration-operations.md`（新規）, `.github/workflows/*`（必要に応じて追加）
+  - Include:
+    - ツール最終決定（例: `goose`）と採用理由
+    - CI での適用検証（クリーンDBへの適用 + 差分/順序検査）
+    - 本番適用フロー（Neon/Fly.io 前提、ロールバック方針含む）
+  - Purpose: Phase1 の未確定事項を解消し、再現可能なDB変更運用を確立する
+  - _Leverage: `docs/Phase1/decisions.md`（TODO）, `docs/tech.md`（Development Environment）_
+  - _Requirements: 5.3_
+  - _Prompt: Role: DevOps + Database Engineer | Task: Finalize migration tooling and establish local/CI/prod workflows with clear rollback guidance | Restrictions: Keep workflow simple and auditable | Success: Team can apply and verify migrations consistently across environments_
+
+- [ ] 33. 本番運用詳細（Fly.io/Neon/Secrets/Deploy）を確定し、手順をコード化する
+  - File: `docs/Phase2/production-operations.md`（新規）, `infra/*`（必要に応じて追加/更新）, `docs/tech.md`（更新）
+  - Include:
+    - 環境変数/シークレット管理ポリシー
+    - Fly.io へのデプロイ手順（Remix/Backend/Authentik）
+    - Neon 接続、ネットワーク方針、障害時の切り戻し手順
+  - Purpose: Known Limitations に残っている本番運用の曖昧さを解消し、運用を属人化させない
+  - _Leverage: `docs/tech.md`（Deployment Notes, Known Limitations）, `infra/authentik/*`_
+  - _Requirements: 5.3_
+  - _Prompt: Role: Production Engineer | Task: Define concrete production runbook and deployment configuration for Fly.io + Neon with secret handling and rollback steps | Restrictions: Prefer reproducible, scriptable steps over manual operation | Success: Production deployment is repeatable and documented end-to-end_
+
+- [ ] 34. 監視・可観測性を導入する（ログ/メトリクス/アラート最小セット）
+  - File: `backend/internal/infrastructure/observability/*`（新規）, `client/app/services/observability.server.ts`（新規）, `docs/Phase2/observability.md`（新規）
+  - Include:
+    - 構造化ログ（requestId/userId/method/status/latency）
+    - 最小メトリクス（RPC件数、エラー率、p95 レイテンシ）
+    - 主要アラート条件と一次対応手順
+  - Purpose: 障害検知と原因追跡を短時間化し、Phase2 以降の機能拡張に備える
+  - _Leverage: `docs/tech.md`（Known Limitations, Error Handling Standards）, `docs/Phase1/security-checklist.md`（requestId）_
+  - _Requirements: Reliability, Performance, Security（NFR）_
+  - _Prompt: Role: SRE-minded Full-stack Engineer | Task: Introduce baseline observability for Remix and Go backend and document alert/runbook essentials | Restrictions: Start small; avoid over-instrumentation | Success: Core metrics and logs are visible, and alerting catches major regressions_
