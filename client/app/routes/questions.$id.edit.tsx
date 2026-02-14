@@ -26,9 +26,11 @@ import {
   toQuestionConformFieldErrors,
 } from "../schemas/question";
 import { requireAuthenticatedUser } from "../services/auth.server";
+import { CSRF_TOKEN_FIELD_NAME, issueCsrfToken, verifyCsrfToken } from "../services/csrf.server";
 import { normalizeGrpcHttpError, throwGrpcErrorResponse } from "../services/grpc-error.server";
 
 type LoaderData = {
+  csrfToken: string;
   initialValues: CreateQuestionFormValue;
   questionId: string;
   requestId: string;
@@ -84,6 +86,7 @@ function toInitialFormValues(question: QuestionDetail): CreateQuestionFormValue 
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const user = await requireAuthenticatedUser(request);
   const questionId = resolveRequiredQuestionId(params.id);
+  const { csrfToken, setCookie } = await issueCsrfToken(request);
   const requestId = createRequestId();
 
   try {
@@ -98,13 +101,16 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 
     return json<LoaderData>(
       {
+        csrfToken,
         initialValues: toInitialFormValues(question),
         questionId: question.id,
         requestId,
         userId: user.userId,
       },
       {
-        headers: { "x-request-id": requestId },
+        headers: setCookie
+          ? { "Set-Cookie": setCookie, "x-request-id": requestId }
+          : { "x-request-id": requestId },
       },
     );
   } catch (error) {
@@ -119,25 +125,28 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 // action は編集フォーム送信を受け、入力検証と更新保存を実行する。
 export async function action({ params, request }: ActionFunctionArgs) {
   const user = await requireAuthenticatedUser(request);
+  const formData = await request.formData();
+  const { requestId } = await verifyCsrfToken({ formData, request });
   const questionId = params.id?.trim();
   if (!questionId) {
-    return json<ActionData>({ ok: false, message: "id が指定されていません。" }, { status: 400 });
+    return json<ActionData>(
+      { ok: false, message: "id が指定されていません。", requestId },
+      { status: 400, headers: { "x-request-id": requestId } },
+    );
   }
 
-  const formData = await request.formData();
   const submission = parseWithZod(formData, { schema: createQuestionFormSchema });
   if (submission.status !== "success") {
     return json<ActionData>(
       {
         ok: false,
         message: "入力内容を確認してください。",
+        requestId,
         submissionResult: submission.reply(),
       },
-      { status: 400 },
+      { status: 400, headers: { "x-request-id": requestId } },
     );
   }
-
-  const requestId = createRequestId();
 
   try {
     const result = await updateQuestion({
@@ -234,6 +243,7 @@ export default function QuestionsEditRoute() {
       </p>
 
       <Form method="post" {...getFormProps(form)}>
+        <input type="hidden" name={CSRF_TOKEN_FIELD_NAME} value={data.csrfToken} />
         <label style={{ display: "block" }}>
           問題文
           <input {...getInputProps(fields.prompt, { type: "text" })} style={{ display: "block", marginTop: 6, width: "100%" }} />

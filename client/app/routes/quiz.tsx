@@ -17,10 +17,12 @@ import {
 import type { QuizQuestion } from "../grpc/quiz.server";
 import { getQuestion, submitAnswer } from "../grpc/quiz.server";
 import { quizAnswerFormSchema, resolveQuizChoiceFieldError } from "../schemas/quiz";
+import { CSRF_TOKEN_FIELD_NAME, issueCsrfToken, verifyCsrfToken } from "../services/csrf.server";
 import { normalizeGrpcHttpError, throwGrpcErrorResponse } from "../services/grpc-error.server";
 import { getUser } from "../services/session.server";
 
 type LoaderData = {
+  csrfToken: string;
   question: QuizQuestion;
   requestId: string;
 };
@@ -62,6 +64,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const user = await getUser(request);
   const url = new URL(request.url);
   const previousQuestionId = toOptionalTrimmedString(url.searchParams.get("previousQuestionId"));
+  const { csrfToken, setCookie } = await issueCsrfToken(request);
 
   try {
     const result = await getQuestion({
@@ -75,11 +78,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     return json<LoaderData>(
       {
+        csrfToken,
         question,
         requestId: result.requestId,
       },
       {
-        headers: { "x-request-id": result.requestId },
+        headers: setCookie
+          ? { "Set-Cookie": setCookie, "x-request-id": result.requestId }
+          : { "x-request-id": result.requestId },
       },
     );
   } catch (error) {
@@ -94,6 +100,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export async function action({ request }: ActionFunctionArgs) {
   const user = await getUser(request);
   const formData = await request.formData();
+  const { requestId } = await verifyCsrfToken({ formData, request });
   const submission = parseWithZod(formData, { schema: quizAnswerFormSchema });
   if (submission.status !== "success") {
     const selectedChoiceId = toOptionalTrimmedString(formData.get("choiceId"));
@@ -103,12 +110,13 @@ export async function action({ request }: ActionFunctionArgs) {
       {
         ok: false,
         message: questionIdError ?? "入力内容を確認してください。",
+        requestId,
         selectedChoiceId,
         fieldErrors: {
           choiceId: choiceIdError,
         },
       },
-      { status: 400 },
+      { status: 400, headers: { "x-request-id": requestId } },
     );
   }
   const questionId = submission.value.questionId;
@@ -116,7 +124,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     const result = await submitAnswer({
-      callContext: { userId: user?.userId },
+      callContext: { requestId, userId: user?.userId },
       request: {
         questionId,
         selectedChoiceId,
@@ -143,6 +151,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const normalized = normalizeGrpcHttpError({
       error,
       fallbackMessage: "回答の送信に失敗しました。時間をおいて再試行してください。",
+      requestId,
     });
     return json<ActionData>(
       {
@@ -183,6 +192,7 @@ export default function QuizRoute() {
       <p className="muted">{data.question.prompt}</p>
 
       <Form method="post">
+        <input type="hidden" name={CSRF_TOKEN_FIELD_NAME} value={data.csrfToken} />
         <input type="hidden" name="questionId" value={data.question.id} />
         <fieldset disabled={isSubmitting || answered}>
           <legend className="muted">回答</legend>

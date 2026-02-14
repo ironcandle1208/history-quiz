@@ -10,6 +10,8 @@ const {
   getMyStatsMock,
   createRequestIdMock,
   requireAuthenticatedUserMock,
+  issueCsrfTokenMock,
+  verifyCsrfTokenMock,
 } = vi.hoisted(() => ({
   createQuestionMock: vi.fn(),
   getMyQuestionMock: vi.fn(),
@@ -19,6 +21,8 @@ const {
   getMyStatsMock: vi.fn(),
   createRequestIdMock: vi.fn(),
   requireAuthenticatedUserMock: vi.fn(),
+  issueCsrfTokenMock: vi.fn(),
+  verifyCsrfTokenMock: vi.fn(),
 }));
 
 vi.mock("../../grpc/question.server", () => ({
@@ -39,6 +43,12 @@ vi.mock("../../grpc/client.server", () => ({
 
 vi.mock("../../services/auth.server", () => ({
   requireAuthenticatedUser: requireAuthenticatedUserMock,
+}));
+
+vi.mock("../../services/csrf.server", () => ({
+  CSRF_TOKEN_FIELD_NAME: "csrfToken",
+  issueCsrfToken: issueCsrfTokenMock,
+  verifyCsrfToken: verifyCsrfTokenMock,
 }));
 
 import { action as createQuestionAction } from "../../routes/questions.new";
@@ -134,6 +144,8 @@ describe("integration: 作問→一覧→編集", () => {
     let requestSequence = 1;
 
     requireAuthenticatedUserMock.mockResolvedValue({ userId: "user-1" });
+    issueCsrfTokenMock.mockResolvedValue({ csrfToken: "csrf-test-token" });
+    verifyCsrfTokenMock.mockResolvedValue({ requestId: "req-csrf-test" });
     createRequestIdMock.mockImplementation(() => `req-${requestSequence++}`);
 
     createQuestionMock.mockImplementation(async (params: { request: { draft: Omit<StoredQuestion, "id" | "updatedAt"> } }) => {
@@ -241,7 +253,7 @@ describe("integration: 作問→一覧→編集", () => {
     );
     expect(createResponse.status).toBe(200);
     expect(createQuestionMock).toHaveBeenCalledWith({
-      callContext: { userId: "user-1" },
+      callContext: { requestId: "req-csrf-test", userId: "user-1" },
       request: {
         draft: {
           prompt: "日本の首都はどこですか？",

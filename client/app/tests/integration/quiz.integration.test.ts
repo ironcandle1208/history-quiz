@@ -1,10 +1,12 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getQuestionMock, submitAnswerMock, getUserMock } = vi.hoisted(() => ({
+const { getQuestionMock, submitAnswerMock, getUserMock, issueCsrfTokenMock, verifyCsrfTokenMock } = vi.hoisted(() => ({
   getQuestionMock: vi.fn(),
   submitAnswerMock: vi.fn(),
   getUserMock: vi.fn(),
+  issueCsrfTokenMock: vi.fn(),
+  verifyCsrfTokenMock: vi.fn(),
 }));
 
 vi.mock("../../grpc/quiz.server", () => ({
@@ -14,6 +16,12 @@ vi.mock("../../grpc/quiz.server", () => ({
 
 vi.mock("../../services/session.server", () => ({
   getUser: getUserMock,
+}));
+
+vi.mock("../../services/csrf.server", () => ({
+  CSRF_TOKEN_FIELD_NAME: "csrfToken",
+  issueCsrfToken: issueCsrfTokenMock,
+  verifyCsrfToken: verifyCsrfTokenMock,
 }));
 
 import { action, loader } from "../../routes/quiz";
@@ -55,6 +63,8 @@ async function toJson<T>(response: Response): Promise<T> {
 describe("integration: /quiz", () => {
   beforeEach(() => {
     getUserMock.mockResolvedValue({ userId: "user-1" });
+    issueCsrfTokenMock.mockResolvedValue({ csrfToken: "csrf-test-token" });
+    verifyCsrfTokenMock.mockResolvedValue({ requestId: "req-csrf-test" });
   });
 
   afterEach(() => {
@@ -117,7 +127,7 @@ describe("integration: /quiz", () => {
     expect(answerBody.result.questionId).toBe("q-1");
     expect(answerBody.result.selectedChoiceId).toBe("c-2");
     expect(submitAnswerMock).toHaveBeenCalledWith({
-      callContext: { userId: "user-1" },
+      callContext: { requestId: "req-csrf-test", userId: "user-1" },
       request: {
         questionId: "q-1",
         selectedChoiceId: "c-2",

@@ -284,7 +284,7 @@
 
 ## Phase2 Planned Tasks
 
-- [ ] 31. CSRF トークンを導入し、状態変更系の全 POST を保護する
+- [x] 31. CSRF トークンを導入し、状態変更系の全 POST を保護する
   - File: `client/app/services/csrf.server.ts`（新規）, `client/app/routes/**/*.tsx`（対象 action を更新）, `docs/Phase2/csrf-rollout.md`（新規）
   - Include:
     - セッション単位の CSRF トークン発行/検証

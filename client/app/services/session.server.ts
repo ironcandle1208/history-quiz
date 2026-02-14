@@ -1,6 +1,8 @@
 // Cookie セッションを扱う（サーバー専用）。
 // userId の保存先をここへ集約し、ルートから Cookie 実装詳細を隠蔽する。
 
+import { randomBytes } from "node:crypto";
+
 import { createCookieSessionStorage } from "@remix-run/node";
 
 const SESSION_COOKIE_NAME = "history_quiz_session";
@@ -9,9 +11,11 @@ const SESSION_OIDC_STATE_KEY = "oidcState";
 const SESSION_OIDC_NONCE_KEY = "oidcNonce";
 const SESSION_OIDC_CODE_VERIFIER_KEY = "oidcCodeVerifier";
 const SESSION_OIDC_REDIRECT_TO_KEY = "oidcRedirectTo";
+const SESSION_CSRF_TOKEN_KEY = "csrfToken";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
 type SessionData = {
+  csrfToken?: string;
   oidcCodeVerifier?: string;
   oidcNonce?: string;
   oidcRedirectTo?: string;
@@ -72,6 +76,21 @@ function clearPendingOidcAuthOnSession(session: Awaited<ReturnType<typeof getUse
   session.unset(SESSION_OIDC_REDIRECT_TO_KEY);
 }
 
+// generateCsrfToken は推測困難な CSRF トークンを生成する。
+function generateCsrfToken(): string {
+  return randomBytes(32).toString("hex");
+}
+
+// toSessionNonEmptyString はセッション値をトリム済み非空文字列として取り出す。
+function toSessionNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 // getUserSession は Cookie 文字列から Remix セッションを復元する。
 export async function getUserSession(request: Request) {
   return sessionStorage.getSession(request.headers.get("Cookie"));
@@ -80,40 +99,53 @@ export async function getUserSession(request: Request) {
 // getUser はセッションから現在ログイン中の userId を取得する。
 export async function getUser(request: Request): Promise<SessionUser | null> {
   const session = await getUserSession(request);
-  const userId = session.get(SESSION_USER_ID_KEY);
-  if (typeof userId !== "string" || userId.trim().length === 0) {
+  const userId = toSessionNonEmptyString(session.get(SESSION_USER_ID_KEY));
+  if (!userId) {
     return null;
   }
 
-  return { userId: userId.trim() };
+  return { userId };
 }
 
 // getPendingOidcAuth は OIDC 開始時に保存した state/nonce などを取得する。
 export async function getPendingOidcAuth(request: Request): Promise<PendingOidcAuth | null> {
   const session = await getUserSession(request);
-  const state = session.get(SESSION_OIDC_STATE_KEY);
-  const nonce = session.get(SESSION_OIDC_NONCE_KEY);
-  const codeVerifier = session.get(SESSION_OIDC_CODE_VERIFIER_KEY);
-  const redirectTo = session.get(SESSION_OIDC_REDIRECT_TO_KEY);
+  const state = toSessionNonEmptyString(session.get(SESSION_OIDC_STATE_KEY));
+  const nonce = toSessionNonEmptyString(session.get(SESSION_OIDC_NONCE_KEY));
+  const codeVerifier = toSessionNonEmptyString(session.get(SESSION_OIDC_CODE_VERIFIER_KEY));
+  const redirectTo = toSessionNonEmptyString(session.get(SESSION_OIDC_REDIRECT_TO_KEY));
 
   if (
     typeof state !== "string" ||
     typeof nonce !== "string" ||
     typeof codeVerifier !== "string" ||
-    typeof redirectTo !== "string" ||
-    state.trim().length === 0 ||
-    nonce.trim().length === 0 ||
-    codeVerifier.trim().length === 0 ||
-    redirectTo.trim().length === 0
+    typeof redirectTo !== "string"
   ) {
     return null;
   }
 
+  return { codeVerifier, nonce, redirectTo, state };
+}
+
+// getSessionCsrfToken はセッションに保存された CSRF トークンを取得する。
+export async function getSessionCsrfToken(request: Request): Promise<string | null> {
+  const session = await getUserSession(request);
+  return toSessionNonEmptyString(session.get(SESSION_CSRF_TOKEN_KEY)) ?? null;
+}
+
+// ensureSessionCsrfToken はセッションに CSRF トークンが無ければ生成して保存する。
+export async function ensureSessionCsrfToken(request: Request): Promise<{ csrfToken: string; setCookie?: string }> {
+  const session = await getUserSession(request);
+  const existingToken = toSessionNonEmptyString(session.get(SESSION_CSRF_TOKEN_KEY));
+  if (existingToken) {
+    return { csrfToken: existingToken };
+  }
+
+  const newToken = generateCsrfToken();
+  session.set(SESSION_CSRF_TOKEN_KEY, newToken);
   return {
-    codeVerifier: codeVerifier.trim(),
-    nonce: nonce.trim(),
-    redirectTo: redirectTo.trim(),
-    state: state.trim(),
+    csrfToken: newToken,
+    setCookie: await sessionStorage.commitSession(session),
   };
 }
 

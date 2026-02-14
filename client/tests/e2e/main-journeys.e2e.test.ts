@@ -11,6 +11,8 @@ const {
   listMyQuestionsMock,
   submitAnswerMock,
   createRequestIdMock,
+  issueCsrfTokenMock,
+  verifyCsrfTokenMock,
 } = vi.hoisted(() => ({
   beginOidcAuthorizationMock: vi.fn(),
   completeOidcAuthorizationMock: vi.fn(),
@@ -21,6 +23,8 @@ const {
   listMyQuestionsMock: vi.fn(),
   submitAnswerMock: vi.fn(),
   createRequestIdMock: vi.fn(),
+  issueCsrfTokenMock: vi.fn(),
+  verifyCsrfTokenMock: vi.fn(),
 }));
 
 vi.mock("../../app/services/oidc.server", () => ({
@@ -55,6 +59,12 @@ vi.mock("../../app/grpc/user.server", () => ({
 
 vi.mock("../../app/grpc/client.server", () => ({
   createRequestId: createRequestIdMock,
+}));
+
+vi.mock("../../app/services/csrf.server", () => ({
+  CSRF_TOKEN_FIELD_NAME: "csrfToken",
+  issueCsrfToken: issueCsrfTokenMock,
+  verifyCsrfToken: verifyCsrfTokenMock,
 }));
 
 import { loader as authCallbackLoader } from "../../app/routes/auth.callback";
@@ -161,6 +171,8 @@ describe("e2e: 主要導線（route scenario）", () => {
     let attemptSequence = 1;
 
     createRequestIdMock.mockImplementation(() => `req-e2e-${requestSequence++}`);
+    issueCsrfTokenMock.mockResolvedValue({ csrfToken: "csrf-test-token" });
+    verifyCsrfTokenMock.mockResolvedValue({ requestId: "req-csrf-test" });
 
     beginOidcAuthorizationMock.mockImplementation(async (params: { redirectTo: string }) => ({
       authorizationUrl: "https://mock-oidc.local/authorize?state=state-e2e-1",

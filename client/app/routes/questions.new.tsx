@@ -6,7 +6,7 @@ import { getCollectionProps, getFormProps, getInputProps, getTextareaProps, useF
 import { getZodConstraint, parseWithZod } from "@conform-to/zod/v4";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Form, useActionData, useNavigation } from "@remix-run/react";
+import { Form, useActionData, useLoaderData, useNavigation } from "@remix-run/react";
 
 import { createQuestion } from "../grpc/question.server";
 import {
@@ -16,7 +16,13 @@ import {
   toQuestionConformFieldErrors,
 } from "../schemas/question";
 import { requireAuthenticatedUser } from "../services/auth.server";
+import { CSRF_TOKEN_FIELD_NAME, issueCsrfToken, verifyCsrfToken } from "../services/csrf.server";
 import { normalizeGrpcHttpError } from "../services/grpc-error.server";
+
+type LoaderData = {
+  csrfToken: string;
+  ok: true;
+};
 
 type ActionData = {
   ok: boolean;
@@ -32,13 +38,20 @@ type ActionData = {
 // loader は未認証アクセスをログインへリダイレクトさせる。
 export async function loader({ request }: LoaderFunctionArgs) {
   await requireAuthenticatedUser(request);
-  return json({ ok: true });
+  const { csrfToken, setCookie } = await issueCsrfToken(request);
+  return json<LoaderData>(
+    { csrfToken, ok: true },
+    {
+      headers: setCookie ? { "Set-Cookie": setCookie } : undefined,
+    },
+  );
 }
 
 // action は問題作成フォームの入力検証と保存処理を実行する。
 export async function action({ request }: ActionFunctionArgs) {
   const user = await requireAuthenticatedUser(request);
   const formData = await request.formData();
+  const { requestId } = await verifyCsrfToken({ formData, request });
   const submission = parseWithZod(formData, { schema: createQuestionFormSchema });
 
   if (submission.status !== "success") {
@@ -46,15 +59,16 @@ export async function action({ request }: ActionFunctionArgs) {
       {
         ok: false,
         message: "入力内容を確認してください。",
+        requestId,
         submissionResult: submission.reply(),
       },
-      { status: 400 },
+      { status: 400, headers: { "x-request-id": requestId } },
     );
   }
 
   try {
     const result = await createQuestion({
-      callContext: { userId: user.userId },
+      callContext: { requestId, userId: user.userId },
       request: {
         draft: {
           prompt: submission.value.prompt,
@@ -89,6 +103,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const normalized = normalizeGrpcHttpError({
       error,
       fallbackMessage: "問題の保存に失敗しました。時間をおいて再試行してください。",
+      requestId,
     });
     const convertedFieldErrors = toQuestionConformFieldErrors(normalized.fieldErrors);
 
@@ -111,6 +126,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function QuestionsNewRoute() {
+  const data = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting" && navigation.formMethod === "post";
@@ -139,6 +155,7 @@ export default function QuestionsNewRoute() {
       </p>
 
       <Form method="post" {...getFormProps(form)}>
+        <input type="hidden" name={CSRF_TOKEN_FIELD_NAME} value={data.csrfToken} />
         <label style={{ display: "block" }}>
           問題文
           <input {...getInputProps(fields.prompt, { type: "text" })} style={{ display: "block", marginTop: 6, width: "100%" }} />
