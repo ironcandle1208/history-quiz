@@ -73,7 +73,8 @@ make db-setup
 - `backend/.env` が無ければ `backend/.env.example` から作成
 - `make db-up` でローカル Postgres を起動
 - `backend/.env` を読み込んで `DATABASE_URL` を設定
-- `backend/db/migrations/*.sql` を順番に適用
+- `scripts/verify_migration_files.sh` で命名規約/順序を検証
+- `scripts/apply_db_migrations.sh` で `backend/db/migrations/*.sql` を順番に適用
 
 ### Neon を使う場合
 - `backend/.env` の `DATABASE_URL` を Neon 接続文字列に差し替える。

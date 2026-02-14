@@ -23,16 +23,26 @@
 
 ## 2. DB マイグレーション運用（ツール/方針）
 
-### 決定（暫定）
-- Phase1 では「SQLファイルによるマイグレーション」を採用し、ツールは導入時に確定する。
-  - `backend/db/migrations/` を単一の真実とし、適用順をファイル名（タイムスタンプ）で管理する。
+### 決定（Phase2 で確定: 2026-02-14）
+- ツールは `psql` + 運用スクリプト（`scripts/verify_migration_files.sh` / `scripts/apply_db_migrations.sh`）を採用する。
+- `backend/db/migrations/` を単一の真実とし、適用順はファイル名のタイムスタンプで管理する。
+- 命名規約は `YYYYMMDDHHMMSS_description.sql` に固定し、CI で自動検証する。
 
-### 理由
-- まずはスキーマと制約の合意を優先し、ツール選定を後ろ倒しできるようにするため。
-- 既存の `docs/structure.md` と整合し、`sqlc`（生SQLを単一の真実）方針とも衝突しないため。
+### 採用理由
+- 現行実装（純SQL + `psql`）と整合し、既存マイグレーションをそのまま運用できるため。
+- `goose` などの追加DSL/ヘッダ記法を導入せず、SQL ファイルを直接レビューできるため。
+- ローカル・CI・本番で同じ適用経路（同一スクリプト）を使え、手順差分を最小化できるため。
 
-### TODO（確定が必要）
-- ローカル適用（例: `atlas` / `goose` / `sqitch` 等）の採用可否
-- CI での自動適用・検証方法（マイグレーション差分の検知）
-- 本番適用手順（Fly.io / Neon の運用に合わせる）
+### 運用ルール（確定）
+- ローカル:
+  - `make db-setup`（内部で `scripts/apply_db_migrations.sh` を実行）
+- CI:
+  - `.github/workflows/migration-validation.yml` で以下を検証する。
+    - 命名/順序検証（`scripts/verify_migration_files.sh`）
+    - クリーンDBへの全適用（`scripts/apply_db_migrations.sh`）
+- 本番（Neon）:
+  - 事前に Neon 側のバックアップ/復元ポイントを確保し、`DATABASE_URL` を本番値にして同一スクリプトを実行する。
+  - ロールバックは「原則 forward fix」、緊急時は Neon の復元機能で切り戻す。
 
+### 補足
+- 詳細手順は `docs/Phase2/migration-operations.md` を単一の運用Runbookとして参照する。

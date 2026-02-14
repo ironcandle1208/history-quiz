@@ -1,0 +1,61 @@
+name: migration-validation
+
+on:
+  pull_request:
+    paths:
+      - "backend/db/migrations/**"
+      - "scripts/**"
+      - ".github/workflows/migration-validation.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/db/migrations/**"
+      - "scripts/**"
+      - ".github/workflows/migration-validation.yml"
+
+jobs:
+  verify-files:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify migration naming and order
+        run: ./scripts/verify_migration_files.sh
+
+  apply-on-clean-db:
+    runs-on: ubuntu-latest
+    needs: verify-files
+    env:
+      DATABASE_URL: postgresql://historyquiz:historyquiz@127.0.0.1:5432/historyquiz?sslmode=disable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Start local postgres container
+        run: docker compose -f docker-compose.local-db.yml up -d app-postgres
+
+      - name: Wait for postgres
+        run: |
+          # DB受付開始を待機し、CIの初期接続失敗を防ぐ。
+          for i in $(seq 1 30); do
+            if psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "select 1" >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Postgres 起動待機がタイムアウトしました。"
+          exit 1
+
+      - name: Apply migrations
+        run: ./scripts/apply_db_migrations.sh
+
+      - name: Stop local postgres container
+        if: always()
+        run: docker compose -f docker-compose.local-db.yml down -v

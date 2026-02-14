@@ -51,20 +51,7 @@ if ! psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "select 1" >/dev/null 2>&1; then
   exit 1
 fi
 
-# nullglob を有効化し、マイグレーションファイルが無い場合の誤実行を防ぐ。
-shopt -s nullglob
-migration_files=(backend/db/migrations/*.sql)
-shopt -u nullglob
-
-if [ "${#migration_files[@]}" -eq 0 ]; then
-  echo "エラー: backend/db/migrations に SQL ファイルが見つかりません。"
-  exit 1
-fi
-
-echo "マイグレーションを適用します..."
-for f in "${migration_files[@]}"; do
-  echo "  適用中: ${f}"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
-done
+# 共通スクリプトを使って命名/順序検証付きでマイグレーションを適用する。
+./scripts/apply_db_migrations.sh
 
 echo "完了: アプリDB起動とマイグレーション適用が終了しました。"

@@ -295,7 +295,7 @@
   - _Requirements: 9.4_
   - _Prompt: Role: Security-focused Remix Engineer | Task: Add server-side CSRF token issue/verify flow and enforce it for all state-changing actions | Restrictions: Keep tokens server authoritative; do not break existing form UX | Success: Protected routes reject missing/invalid token with consistent 403 handling_
 
-- [ ] 32. DB マイグレーション運用を確定する（ローカル/CI/本番）
+- [x] 32. DB マイグレーション運用を確定する（ローカル/CI/本番）
   - File: `docs/Phase1/decisions.md`（更新）, `docs/Phase2/migration-operations.md`（新規）, `.github/workflows/*`（必要に応じて追加）
   - Include:
     - ツール最終決定（例: `goose`）と採用理由
