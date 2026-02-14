@@ -51,12 +51,12 @@ history-quiz は世界史の4択クイズを出題し、回答の正誤判定を
 
 ### Requirement 5
 
-**User Story:** システム運用者として、クライアント・APIGateway・バックエンドの責務を分離したいので、選定した通信方式で連携できるようにしたい。
+**User Story:** システム運用者として、ブラウザ・Remix（BFF）・バックエンドの責務を分離したいので、選定した通信方式で連携できるようにしたい。
 
 #### Acceptance Criteria
 
-1. WHEN クライアントがデータ取得や送信を行うとき THEN システム SHALL HTTP/JSON を介して APIGateway と通信する。
-2. WHEN APIGateway がバックエンドに処理を委譲するとき THEN システム SHALL gRPC を介して Go バックエンドと通信する。
+1. WHEN ブラウザがデータ取得や送信を行うとき THEN システム SHALL HTTP/JSON を介して Remix（BFF）と通信する。
+2. WHEN Remix（BFF）がバックエンドに処理を委譲するとき THEN システム SHALL gRPC を介して Go バックエンドと通信する。
 3. IF 選定方式で実装上の不都合が判明した場合 THEN システム SHALL 代替案を検討するための相談事項を提示する。
 
 ### Requirement 6
@@ -94,8 +94,8 @@ history-quiz は世界史の4択クイズを出題し、回答の正誤判定を
 
 #### Acceptance Criteria
 
-1. WHEN ログイン画面を開いたとき THEN システム SHALL 認証情報を入力できるフォームを表示する。
-2. WHEN 認証情報を送信したとき THEN システム SHALL 認証結果を表示する。
+1. WHEN ログイン画面を開いたとき THEN システム SHALL OIDC 認証を開始し、認証プロバイダのログイン画面へ遷移できる。
+2. WHEN 利用者が認証プロバイダで認証を完了したとき THEN システム SHALL コールバックを処理してログイン状態を確立する。
 3. IF 認証に失敗した場合 THEN システム SHALL エラーメッセージを表示する。
 4. WHEN 認証済みでない利用者がマイページや問題作成を開こうとしたとき THEN システム SHALL ログインを促す。
 
@@ -103,7 +103,7 @@ history-quiz は世界史の4択クイズを出題し、回答の正誤判定を
 
 ### Code Architecture and Modularity
 - **Single Responsibility Principle**: 各モジュールは単一の責務を持つ。
-- **Modular Design**: フロント、APIGateway、バックエンドは明確に分離し、再利用可能な単位で実装する。
+- **Modular Design**: ブラウザ、Remix（BFF）、バックエンドは明確に分離し、再利用可能な単位で実装する。
 - **Dependency Management**: 不要な依存を避け、各レイヤーの責務を侵食しない。
 - **Clear Interfaces**: HTTP/JSON と gRPC のインターフェースを明確に定義する。
 

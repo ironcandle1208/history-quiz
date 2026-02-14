@@ -14,10 +14,10 @@
 ※クライアントは Remix（React）で統一する方針とする（Web のみ想定のため）。
 
 ### Key Dependencies/Libraries
-（現時点では実装未着手のため、以下は採用候補/想定）
 - **Client**: Remix、React、フォーム/バリデーション（`zod` + `conform`）
-- **Client（サーバー側）**: gRPC クライアント（`@grpc/grpc-js`）、Protocol Buffers 生成物
-- **Backend**: gRPC、DB アクセス（`sqlc` + `pgx` を想定）
+- **Client（サーバー側）**: gRPC クライアント（`@grpc/grpc-js`）、OIDC 処理、Protocol Buffers 生成物
+- **Backend**: gRPC（`google.golang.org/grpc`）、DB アクセス（`pgx`）、共通エラー型（`apperror`）
+- **Proto Tooling**: `buf`（lint / codegen）
 
 ### Application Architecture
 - **Client-Server**: ブラウザは HTTP で Remix（SSR サーバー）へアクセスする
@@ -41,7 +41,7 @@
 
 ### Data Lifecycle（削除方針）
 - 過去データの整合性（解答履歴/正答率）を保つため、`Question` は `deleted_at`（論理削除）を採用する
-- 一覧/出題クエリは `deleted_at IS NULL` を標準とする（`sqlc` のクエリで徹底する）
+- 一覧/出題クエリは `deleted_at IS NULL` を標準とする（Repository のクエリで徹底する）
 
 ### External Integrations (if applicable)
 - **Protocols**: HTTP（Browser→Remix）、gRPC（Remix→Backend）
@@ -59,16 +59,14 @@
 ## Development Environment
 
 ### Build & Development Tools
-（採用候補/想定）
 - **Package Management**: pnpm（Client）、go mod（Backend）
-- **Development workflow**: ローカル開発 + ホットリロード（Client）、`go test`（Backend）
-- **Proto generation**: `buf` 等の導入を検討（未確定）
+- **Development workflow**: `make` 経由で DB/Backend/Client を起動し、Client は `pnpm dev`、Backend は `go run` を利用
+- **Proto generation**: `buf`（`proto/buf.gen.yaml`）
 
 ### Code Quality Tools
-（採用候補/想定）
-- **Static Analysis**: ESLint（TS）、golangci-lint（Go）
+- **Static Analysis**: ESLint（TS）を利用（Go lint は Phase2 で整備予定）
 - **Formatting**: Prettier（TS）、gofmt（Go）
-- **Testing Framework**: Vitest/Jest（Client）、Go 標準 testing（Backend）
+- **Testing Framework**: Vitest（Client）、Go 標準 testing（Backend）
 - **Documentation**: Markdown（`docs/`、`.walkthrough/`）
 
 ## Development Approach
@@ -188,7 +186,7 @@ JSON で返す場合は、以下の形を基本とする（実装でキー名は
 4. **gRPC（Remix→Go Backend）**: 型安全な契約、低遅延、バックエンドの責務分離を強化するため
 5. **`zod` + `conform`（フォーム/入力検証）**: サーバー側検証を前提にしつつ、フィールド単位のエラー表示とフォーム実装の重複を減らすため
 6. **Authentik（OIDC）**: OSS で「会員登録/メール確認/パスリセット」まで含む認証基盤を揃え、アプリ側の認証実装と運用リスクを下げるため
-7. **`sqlc`（DBアクセス）**: 生SQLを単一の真実として管理しつつ、型安全なGoコードを生成して保守性と安全性を高めるため
+7. **`sqlc`（DBアクセス、段階導入）**: 生SQLを単一の真実として管理する方針を維持しつつ、Phase1 は `pgx` 実装を優先し、段階的に生成コードへ寄せるため
 8. **pnpm（パッケージ管理）**: 依存関係のインストール速度と一貫性を高め、開発体験を安定させるため
 9. **Neon（PostgreSQL）**: アプリDBをマネージドで運用し、バックアップや可用性を委譲するため
 10. **Fly.io（デプロイ）**: Remix/Go/Authentik をコンテナで統一的に運用でき、MVPの公開コストと運用コストのバランスが良いため
@@ -200,3 +198,4 @@ JSON で返す場合は、以下の形を基本とする（実装でキー名は
 - Neon/Fly.io の具体設定（VPC/ネットワーク、環境変数、シークレット、デプロイ手順）は実装フェーズで確定し、本ドキュメントを更新する
 - 監視・可観測性（メトリクス/トレース）は初期スコープ外（必要に応じて追加）
 - Authentik をセルフホストする場合、Authentik 用の Postgres/Redis を別途運用する必要がある（アプリDBの Neon とは別）
+- `Pagination.page_token` / `PageInfo.next_page_token` は proto 定義済みだが、Phase1 実装では未対応（常に空）

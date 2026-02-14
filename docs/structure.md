@@ -3,7 +3,7 @@
 ## Directory Organization
 
 本プロジェクトは「機能（学習/作問/マイページ）」を提供しつつ、アーキテクチャ上は Browser / Remix（SSR + BFF） / Backend を分離する。  
-現時点では実装コードが存在しないため、実装開始時の推奨構造を以下に定義する（必要に応じて調整）。
+以下は Phase1 実装時点の実ディレクトリ構成をベースにした標準構造であり、以後の変更時は本書を更新する。
 
 ```
 project-root/
@@ -17,8 +17,8 @@ project-root/
 │   ├── db/                       # DB関連（マイグレーション、sqlc 入力SQLなど）
 │   │   ├── migrations/           # スキーマ変更（ツールは実装で選定）
 │   │   └── queries/              # sqlc の入力SQL（生SQLを単一の真実にする）
-│   └── sqlc.yaml                 # sqlc 設定ファイル（導入時に追加）
-│   └── tests/
+│   ├── scripts/                  # テスト補助スクリプト等
+│   └── sqlc.yaml                 # sqlc 設定ファイル
 ├── infra/                        # ローカル開発/運用の補助（例: Authentik）
 │   └── authentik/
 │       ├── docker-compose.yml
@@ -65,7 +65,7 @@ project-root/
   - バリデーションスキーマ（`zod`）は `client/app/` 配下に集約し、Remix の action/loader から利用する
   - フォームは `conform` を基本とし、フィールドエラーの表示方法を統一する
 - Backend は `internal/` にドメインごとのパッケージを持ち、gRPC ハンドラは「薄く」しユースケースへ委譲する
-  - DBアクセスは `sqlc` を採用し、`backend/db/queries/` に生SQLを配置する（生成物の配置は `sqlc.yaml` で統一）
+  - DBアクセスは `pgx` 実装を基本とし、`backend/db/queries/` + `sqlc.yaml` を段階導入の入口として管理する
   - 論理削除（`deleted_at`）を採用するテーブルは、通常クエリで `deleted_at IS NULL` を標準とする（クエリの書き忘れを防ぐため、命名規約/テンプレート化も検討する）
 
 ## Code Structure Patterns

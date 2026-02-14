@@ -3,7 +3,7 @@
 ## Overview
 
 history-quiz は「クイズを解く（正誤判定・連続出題）」と「問題を作る（作成・編集・管理）」を中核とし、マイページで学習進捗（解答履歴・正答率）を可視化する。  
-アーキテクチャとして、Web のみ想定のため Remix（SSR + BFF）を採用し、Remix ↔ Go バックエンドは gRPC で責務分離する（従来 APIGateway が担う責務は Remix に内包する）。
+アーキテクチャとして Remix（SSR + BFF）を採用し、Remix ↔ Go バックエンドは gRPC で責務分離する。
 
 本設計では以下を満たすことを主眼に置く。
 - クイズ回答体験の高速性（平均 500ms 目標）
@@ -16,7 +16,7 @@ history-quiz は「クイズを解く（正誤判定・連続出題）」と「�
 ### Technical Standards (tech.md)
 `docs/tech.md` に定義した方針に合わせ、本設計では以下の標準を採用する。
 - API 仕様は「HTTP（Browser→Remix） + gRPC（Remix→Backend）」の2層を前提に、契約（スキーマ）を最優先で固定する
-- 認証は Remix のセッション管理（Cookie）を第一候補とし、ユーザー識別子を gRPC の metadata 等でバックエンドへ伝播する
+- 認証は Remix のセッション管理（Cookie）を採用し、ユーザー識別子を gRPC の metadata 等でバックエンドへ伝播する
 - 入力バリデーションはサーバー側で必須
   - Remix は `zod` + `conform` による一次検証を行い、ユーザーに分かりやすい形でフィールドエラーを返す
   - Backend は最終防衛として、整合性/認可/ドメイン不変条件を必ず検証する（Remix を信頼しない）
@@ -28,13 +28,15 @@ history-quiz は「クイズを解く（正誤判定・連続出題）」と「�
 - `proto/`（gRPC 定義）
 
 ## Code Reuse Analysis
-現時点の `docs/` 以外に実装コードは存在しないため、既存コードの再利用は行わない前提で設計する。  
-将来的に以下を再利用の中心に据える。
-- gRPC のコード生成（proto から Go / TypeScript クライアントを生成）
-- 共通のバリデーションスキーマ（HTTP 入口の DTO とドメインモデルの境界を明確化）
+Phase1 で以下の共通コンポーネントを実装し、機能間で再利用している。
+- gRPC クライアント共通層（`client/app/grpc/client.server.ts`）
+- gRPC→HTTP エラー変換（`client/app/services/grpc-error.server.ts`）
+- 認証/セッション共通層（`client/app/services/auth.server.ts`、`client/app/services/session.server.ts`）
+- バックエンド共通エラー型（`backend/internal/domain/apperror/apperror.go`）
 
 ### Existing Components to Leverage
-- **なし（初期実装フェーズ）**: 実装開始後に共通モジュール（エラー型、ロギング、認証ミドルウェア）を整備する
+- **Remix 共通サービス群**: 認証、セッション、OIDC、エラー変換、gRPC 呼び出しラッパーを各 route から再利用する
+- **Backend 共通層**: interceptor（metadata/userId/requestId）、usecase、repository interface をサービス横断で再利用する
 
 ### Integration Points
 - **Database/Storage**: 4択問題、解答履歴、作成問題の永続化（PostgreSQL / Neon）
@@ -47,7 +49,7 @@ Remix は「認証・ルーティング/SSR・入出力整形・入力バリデ�
 
 ### Architecture Style
 - **Go Backend**: クリーンアーキテクチャ（ヘキサゴナル/オニオンに近い考え方）
-  - gRPC や DB（`sqlc`）は外側（インフラ）として扱い、ユースケースとドメインを中心に置く
+  - gRPC や DB（`pgx`/`sqlc`）は外側（インフラ）として扱い、ユースケースとドメインを中心に置く
   - 認可（所有者チェック等）とドメイン不変条件はバックエンドが最終責務として守る
 - **Remix（BFF）**: レイヤード + ルート（機能）単位の分割
   - Remix の `loader/action` を入口として、入力検証（`zod` + `conform`）→ gRPC 呼び出し → 表示用データ整形の流れを明確にする
@@ -63,7 +65,7 @@ graph TD
   R -->|Cookie Session| S[(Session Store)]
 
 %% 備考:
-%% - Session Store は Cookie（暗号化/署名）で完結させるか、DB/Redis 等に保存するかは実装で選定する
+%% - Phase1 は Cookie（署名付き）でセッションを保持し、サーバー側の別ストアは使わない
 ```
 
 ### Modular Design Principles
@@ -91,14 +93,16 @@ Remix は以下の分割を基本とする。
 - **Purpose:** クイズ出題・回答、問題作成/編集、マイページ表示、認証、入力バリデーション、gRPC 委譲
 - **Interfaces（HTTP 例）:**
   - `GET /quiz`：クイズ画面（SSR/CSR）
-  - `POST /quiz/answer`：回答送信（Remix action）
+  - `POST /quiz`：回答送信（Remix action）
   - `GET /questions/new`：問題作成画面
-  - `POST /questions`：問題作成（Remix action）
+  - `POST /questions/new`：問題作成（Remix action）
   - `GET /questions/:id/edit`：問題編集画面
-  - `POST /questions/:id`：問題更新（Remix action）
+  - `POST /questions/:id/edit`：問題更新（Remix action）
   - `GET /me`：マイページ（履歴・正答率・作成問題一覧）
+  - `GET /login`：OIDC 認証開始（未ログイン時は Authentik へリダイレクト）
+  - `GET /auth/callback`：OIDC コールバック処理
 - **Dependencies:** セッション管理（Cookie）、gRPC クライアント、エラー変換
-- **Reuses:** なし（初期）
+- **Reuses:** 認証/セッション共通サービス、gRPC クライアント共通サービス、入力スキーマ
 
 ### Authentik（OIDC Provider）
 - **Purpose:** 会員登録（メール+パスワード）、ログイン、メール確認、パスワードリセット等の認証機能を提供する
@@ -119,8 +123,8 @@ Remix は以下の分割を基本とする。
   - `QuestionService/ListMyQuestions`
   - `UserService/ListMyAttempts`
   - `UserService/GetMyStats`
-- **Dependencies:** DB 接続、データアクセス層（Repository、`sqlc` 生成コード）
-- **Reuses:** なし（初期）
+- **Dependencies:** DB 接続、データアクセス層（Repository、`pgx`）
+- **Reuses:** interceptor（認証・requestId 伝播）、共通エラー型、repository interface
 
 ## Data Models
 
@@ -129,17 +133,14 @@ Remix は以下の分割を基本とする。
 
 ### User
 ```
-- id: string (UUID 等)
-- email: string（認証方式に依存）
-- authProvider: string（例: "authentik"）
-- authSubject: string（OIDC の sub）
+- id: string (OIDC sub)
 - createdAt: datetime
 ```
 
 ### Question
 ```
 - id: string (UUID)
-- authorUserId: string (UUID)  # 作成者（自作問題の所有者）
+- authorUserId: string         # 作成者（OIDC sub）
 - prompt: string              # 問題文
 - explanation: string?        # 任意（将来拡張）
 - deletedAt: datetime?        # 論理削除（削除済みは出題/一覧から除外）
@@ -164,7 +165,7 @@ Remix は以下の分割を基本とする。
 ### Attempt（解答履歴）
 ```
 - id: string (UUID)
-- userId: string (UUID)
+- userId: string
 - questionId: string (UUID)
 - selectedChoiceId: string (UUID)
 - isCorrect: boolean
@@ -199,13 +200,13 @@ Remix は gRPC status code を HTTP ステータスへ変換して返す。詳�
    - **User Impact:** 出題できない理由を表示し、作問を促す
 
 5. **バックエンド/DB 障害**
-   - **Handling:** Remix は 502/503 を返し、リトライ可能である旨を付与。ログに相関IDを残す
+   - **Handling:** Remix は 500/503 を返し、リトライ可能である旨を付与。ログに相関IDを残す
    - **User Impact:** 「時間をおいて再試行してください」を表示
 
 ## Testing Strategy
 
 ### Unit Testing
-- バックエンド：出題ロジック（ランダム抽選、既定セットフォールバック）、判定、所有者認可、入力検証
+- バックエンド：出題ロジック（決定的選択、既定セットフォールバック）、判定、所有者認可、入力検証
 - Remix：認証/セッション、action/loader のバリデーション、エラー変換（gRPC → HTTP）
 
 ### Integration Testing
