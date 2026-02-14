@@ -273,7 +273,7 @@
   - _Requirements: 5.3_
   - _Prompt: Role: Developer Experience Engineer | Task: Write Phase1 local dev guide including Authentik docker compose, env vars, and run commands | Restrictions: Keep instructions minimal and accurate; avoid external services where possible | Success: New dev can boot the system locally following the doc_
 
-- [ ] 30. セキュリティ観点の最終確認（認証/認可/入力/エラー）を実施し、運用メモを更新する
+- [x] 30. セキュリティ観点の最終確認（認証/認可/入力/エラー）を実施し、運用メモを更新する
   - File: `docs/Phase1/security-checklist.md`（新規）
   - Purpose: 「ユーザー自身のデータのみ」の保証と、境界（Remix/Backend）の責務を再確認する
   - _Leverage: `docs/tech.md`（Security, Threat Model）, `docs/design.md`（Error Handling）_
