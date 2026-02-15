@@ -11,31 +11,37 @@
 
 - [ ] `中` レート制限・スロットリングが未導入
   - 想定影響: ブルートフォース、スパム投稿、アプリ層DoSの耐性不足。
-  - 確認箇所: `client/app/routes/login.tsx`, `client/app/routes/quiz.tsx`, `client/app/routes/questions.new.tsx`, `client/app/routes/questions.$id.edit.tsx`, `infra/fly/client.fly.toml`
+  - 確認箇所: `client/app/routes/login.tsx`, `client/app/routes/quiz.tsx`, `client/app/routes/questions.new.tsx`, `client/app/routes/questions.$id.edit.tsx`, `docs/Phase2/production-operations.md`
 
 - [ ] `中` HTTPリクエストボディサイズの上限未設定
   - 想定影響: 大きなフォーム投稿によるメモリ/CPU圧迫のリスク。
   - 確認箇所: `client/app/routes/quiz.tsx`, `client/app/routes/questions.new.tsx`, `client/app/routes/questions.$id.edit.tsx`
 
-- [ ] `低〜中` HTTP(80)公開時のHTTPS強制が設定ファイル上で明示されていない
-  - 想定影響: 環境依存で平文HTTPアクセスが残る可能性。
-  - 確認箇所: `infra/fly/client.fly.toml`
+- [ ] `中` Cloudflare 側 HTTPS 強制 / TLS モードの標準化不足
+  - 想定影響: 平文HTTPアクセスや TLS 設定不一致（Origin 接続の脆弱化）が残る可能性。
+  - 確認箇所: `docs/Phase2/production-operations.md`
+
+- [ ] `中` Cloudflare キャッシュルール未整備（認証済みページの誤キャッシュ）
+  - 想定影響: `Set-Cookie` を伴う応答やユーザー依存ページが誤ってキャッシュされ、情報露出を引き起こす可能性。
+  - 確認箇所: `docs/Phase2/production-operations.md`, `client/app/routes/*.tsx`
 
 ## 対応方針（2026-02-15時点）
 
 | No | 対象リスク | 優先度 | 対応方針 | 完了条件（受け入れ基準） |
 |---|---|---|---|---|
 | 1 | 共通セキュリティヘッダ未整備 | 高 | `client/app/entry.server.tsx` で共通ヘッダを付与する。最低限 `Content-Security-Policy`、`X-Frame-Options`（または `frame-ancestors`）、`X-Content-Type-Options`、`Referrer-Policy`、`Permissions-Policy`、`Strict-Transport-Security` を適用する。 | `curl -I` で全主要ページ（`/`, `/quiz`, `/me`, `/login`）に同一ヘッダが付与される。CSP違反で画面崩れやログイン不全がない。 |
-| 2 | レート制限・スロットリング未導入 | 高 | エッジ（Fly.io 側）とアプリ側の二段で制御する。まず状態変更系 `POST`（`/login`, `/quiz`, `/questions/new`, `/questions/:id/edit`）に制限を入れる。認証開始（OIDC）と作問APIを優先対象にする。 | 上限超過時に `429` を返し、通常利用では誤検知が発生しない。超過ログ（IP/UA/パス/時刻）を追跡できる。 |
+| 2 | レート制限・スロットリング未導入 | 高 | エッジ（Cloudflare）とアプリ側の二段で制御する。まず状態変更系 `POST`（`/login`, `/quiz`, `/questions/new`, `/questions/:id/edit`）に制限を入れる。認証開始（OIDC）と作問APIを優先対象にする。 | 上限超過時に `429` を返し、通常利用では誤検知が発生しない。超過ログ（IP/UA/パス/時刻）を追跡できる。 |
 | 3 | HTTPリクエストボディサイズ上限未設定 | 中 | インフラ層とアプリ層の両方で上限を設ける。アプリ側では `Content-Length` を検査し、上限超過を `413` で拒否する。フォーム項目の文字数上限もスキーマで維持する。 | 想定上限を超えるリクエストで `413` を返す。通常フォーム送信に影響しない。負荷試験でメモリスパイクが抑制される。 |
-| 4 | HTTPS強制の明示不足 | 中 | 公開HTTP（80）へのアクセスをHTTPSへ強制リダイレクトする設定を明文化し、`infra/fly/client.fly.toml` と運用Runbook（`docs/Phase2/production-operations.md`）に反映する。 | `http://` でアクセスした際に常に `https://` へリダイレクトされる。設定とRunbook記述が一致する。 |
+| 4 | Cloudflare 側 HTTPS 強制 / TLS 標準化不足 | 中 | Cloudflare 側で `Always Use HTTPS` と `SSL/TLS: Full (strict)` を必須化し、運用Runbook（`docs/Phase2/production-operations.md`）へ反映する。 | `http://` でアクセスした際に常に `https://` へリダイレクトされ、Origin 接続も `Full (strict)` で維持される。 |
+| 5 | Cloudflare キャッシュルール未整備 | 中 | Cloudflare で `/quiz`, `/me`, `/login`, `/auth/*`, `/questions/*` を `Bypass cache` に設定し、静的アセットのみキャッシュ対象にする。 | 認証済みページで `cf-cache-status: BYPASS` が確認でき、静的配信では `HIT` が確認できる。 |
 
 ## 実施順序（推奨）
 
 1. 共通セキュリティヘッダの導入
-2. HTTPS強制の明文化と設定反映
+2. Cloudflare 側 HTTPS 強制 / TLS 標準化
 3. レート制限・スロットリング導入
 4. ボディサイズ上限の導入
+5. Cloudflare キャッシュルール整備
 
 ## Fly.io コスト増大リスク（運用）
 

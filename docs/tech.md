@@ -2,7 +2,7 @@
 
 ## Project Type
 - Web アプリケーション（学習用 4 択クイズ + 問題作成 + マイページ）
-- アーキテクチャは Browser / Remix（SSR + BFF） / Go Backend の2サービス構成（Gateway 機能は Remix に内包）
+- アーキテクチャは Browser / Cloudflare / Remix（SSR + BFF） / Go Backend の2サービス構成（Gateway 機能は Remix に内包）
 
 ## Core Technologies
 
@@ -20,10 +20,11 @@
 - **Proto Tooling**: `buf`（lint / codegen）
 
 ### Application Architecture
-- **Client-Server**: ブラウザは HTTP で Remix（SSR サーバー）へアクセスする
+- **Client-Server**: ブラウザは HTTPS で Cloudflare を経由し、Fly 上の Remix（SSR サーバー）へアクセスする
 - **BFF + gRPC Backend**: Remix（BFF）が gRPC で Go バックエンドに処理を委譲する
 - **責務分離**:
   - Browser: 表示・入力・UX
+  - Cloudflare: 公開エッジ、TLS、WAF、レート制御、キャッシュ制御
   - Remix（SSR+BFF）: ルーティング/SSR、認証、入力バリデーション、HTTP レスポンス整形、gRPC 呼び出し
   - Backend: ドメインロジック、認可（所有者チェック等）、永続化
 
@@ -44,7 +45,10 @@
 - 一覧/出題クエリは `deleted_at IS NULL` を標準とする（Repository のクエリで徹底する）
 
 ### External Integrations (if applicable)
-- **Protocols**: HTTP（Browser→Remix）、gRPC（Remix→Backend）
+- **Protocols**: HTTPS（Browser→Cloudflare→Remix）、gRPC（Remix→Backend）
+- **Edge/Network**:
+  - Cloudflare を前段プロキシとして利用し、Fly の `client` は Origin として運用する
+  - 公開ドメインは Cloudflare 配下を正とし、運用上の疎通確認・監視も同一ドメインを利用する
 - **Authentication**:
   - 認証基盤は OSS の `Authentik` を採用し、OIDC（OpenID Connect）で Remix と連携する
   - ログイン状態は Remix が Cookie セッションとして保持する（Web のみ想定のため）
@@ -80,11 +84,15 @@
 - **Code Review Process**: PR ベース（未確定）
 
 ## Deployment & Distribution (if applicable)
-- **Target Platform(s)**: `Fly.io`（Remix / Go Backend / Authentik をコンテナとしてデプロイ）
+- **Target Platform(s)**: `Cloudflare`（Edge） + `Fly.io`（Origin: Remix / Go Backend / Authentik）
 - **Distribution Method**: Web 配信（HTTPS）
 - **Update Mechanism**: `scripts/production_preflight.sh` / `scripts/production_sync_fly_secrets.sh` / `scripts/deploy_production_fly.sh` を共通手順とし、GitHub Actions（`.github/workflows/deploy-fly.yml`）から `staging` 自動・`production` 手動承認で実行する
 
 ### Deployment Notes
+- **Cloudflare（公開エッジ）**:
+  - DNS は Cloudflare Proxy（orange cloud）を有効化する
+  - SSL/TLS モードは `Full (strict)` を採用し、`Always Use HTTPS` を有効化する
+  - WAF / レート制限 / キャッシュルールは Runbook（`docs/Phase2/production-operations.md`）に従って管理する
 - **Remix**: Fly.io のアプリとしてデプロイ（SSR + BFF）
   - Dockerfile: `client/Dockerfile`
   - Fly 設定: `infra/fly/client.fly.toml`
@@ -103,6 +111,7 @@
 ### Production Runbook
 - 本番運用の単一Runbookは `docs/Phase2/production-operations.md` を参照する。
 - Fly アプリ名・設定ファイルは `infra/fly/apps.env` で管理する。
+- Cloudflare のゾーン設定・ルールは Runbook に定義したチェックリストで管理する。
 - デプロイ前後は `make production-preflight` / `make production-smoke` で確認する。
 
 ### Authentik Ops（リソース管理とバックアップ）
@@ -137,10 +146,12 @@ Fly.io 上で Authentik を運用する際は、以下を早期に確定する�
     - Backend（Go）は最終防衛として、整合性/認可/ドメイン不変条件（例: 選択肢4つ、正解が選択肢内、重複選択肢禁止、所有者チェック等）を必ず検証する
   - 認証トークンの取り扱い方針を設計時に明確化する（保存場所、期限、更新、失効）
   - 認可として「ユーザー自身のデータのみ参照・編集」を保証する
+  - 公開経路は Cloudflare 配下へ統一し、TLS 設定は `Full (strict)` を維持する
 - **Threat Model**:
   - 不正な入力（バリデーション回避）
   - 他人の問題/履歴へのアクセス（ID 推測、権限昇格）
   - トークン漏洩・セッション固定（トークン保護）
+  - キャッシュ設定不備による認証済みコンテンツの誤配信
 
 ### Scalability & Reliability
 - **Expected Load**: 初期は小規模想定（学習用途）
@@ -194,7 +205,7 @@ JSON で返す場合は、以下の形を基本とする（実装でキー名は
 ### Decision Log
 1. **Remix 採用（SSR 内包）**: Web のみ想定で、ルーティング/SSR/フォーム処理を一貫させ保守性を高めるため
 2. **Gateway の別サービス化はしない**: Web のみ想定のため、BFF（認証・入力整形・gRPC 呼び出し）を Remix に内包し運用コストを下げる
-3. **HTTP（Browser→Remix）**: ブラウザから扱いやすく、デバッグ容易であるため
+3. **HTTPS（Browser→Cloudflare→Remix）**: Fly を Origin として維持しつつ、公開エッジの防御と配信制御を Cloudflare へ集約するため
 4. **gRPC（Remix→Go Backend）**: 型安全な契約、低遅延、バックエンドの責務分離を強化するため
 5. **`zod` + `conform`（フォーム/入力検証）**: サーバー側検証を前提にしつつ、フィールド単位のエラー表示とフォーム実装の重複を減らすため
 6. **Authentik（OIDC）**: OSS で「会員登録/メール確認/パスリセット」まで含む認証基盤を揃え、アプリ側の認証実装と運用リスクを下げるため
@@ -205,9 +216,11 @@ JSON で返す場合は、以下の形を基本とする（実装でキー名は
 11. **gRPC-JS（`@grpc/grpc-js`）**: BFF 構成でサーバー側からのみ gRPC を呼ぶため、Node.js 向け実装を採用する
 12. **gRPC→HTTP 変換ルールの標準化**: 一貫したエラーレスポンスと運用容易性（調査/復旧）を確保するため
 13. **`deleted_at`（論理削除）**: 解答履歴/正答率の整合性を壊さず、運用上の削除ニーズに対応するため
+14. **Cloudflare 前段構成**: Fly 上のアプリを Origin として維持しながら、TLS/WAF/レート制御をエッジで統一運用するため
 
 ## Known Limitations
 - 監視・可観測性（メトリクス/トレース）は初期スコープ外（必要に応じて追加）
+- Cloudflare 設定の IaC 化（Terraform 等）は未整備で、現時点では Runbook ベースの運用が中心
 - Authentik をセルフホストする場合、Authentik 用の Postgres/Redis を別途運用する必要がある（アプリDBの Neon とは別）
 - Authentik の Fly.io 本番 `fly.toml` は環境依存（外部DB/Redis構成）なので、本リポジトリではテンプレート未同梱
 - `Pagination.page_token` / `PageInfo.next_page_token` は proto 定義済みだが、Phase1 実装では未対応（常に空）

@@ -1,11 +1,12 @@
-# Phase2 本番運用 Runbook（Fly.io / Neon / Secrets / Deploy）
+# Phase2 本番運用 Runbook（Cloudflare / Fly.io / Neon / Secrets / Deploy）
 
 ## 目的
 - 本番運用を属人化させず、同一手順で再現できる状態にする。
-- Fly.io（Remix/Backend/Authentik）と Neon（アプリDB）の接続・デプロイ・障害対応を明文化する。
+- Cloudflare（公開エッジ）と Fly.io（Origin: Remix/Backend/Authentik）、Neon（アプリDB）の接続・デプロイ・障害対応を明文化する。
 
 ## 対象構成
-- 公開Web: `client`（Remix, Fly.io）
+- 公開エッジ: `Cloudflare`（DNS / TLS / WAF / Rate Limit / Cache）
+- 公開Web Origin: `client`（Remix, Fly.io）
 - アプリAPI: `backend`（Go gRPC, Fly.io）
 - 認証基盤: `authentik`（Fly.io。未導入時は `DEPLOY_AUTHENTIK=false` で除外）
 - アプリDB: `Neon PostgreSQL`（`backend` から接続）
@@ -21,7 +22,15 @@
 - `FLY_BACKEND_CONFIG`
 - `BACKEND_GRPC_ADDRESS`（`<backend-app>.internal:50051`）
 
-### 1.2 必須コマンド
+### 1.2 Cloudflare 設定（公開経路）
+1. 公開ドメインを Cloudflare Zone に登録し、`client` Origin へ向けたレコードを `Proxied` で作成する。
+2. SSL/TLS は `Full (strict)` を設定し、`Always Use HTTPS` を有効化する。
+3. キャッシュルールは以下を初期値とする。
+- `Bypass Cache`: `/quiz*`, `/me*`, `/login*`, `/auth/*`, `/questions*`
+- `Cache Eligible`: `/build/*`, `/assets/*` などの静的配信
+4. WAF / レート制限ルールは状態変更系 `POST`（`/login`, `/quiz`, `/questions/new`, `/questions/*/edit`）を優先して適用する。
+
+### 1.3 必須コマンド
 - `flyctl`
 - `psql`
 - `curl`
@@ -32,6 +41,7 @@
 - 秘密値は Git に保存しない。
 - 秘密値はシークレットマネージャー（または CI Secret Store）で一元管理し、実行時に環境変数で注入する。
 - Fly.io への反映は `scripts/production_sync_fly_secrets.sh` のみを使う。
+- Cloudflare API を使った自動化を行う場合は、Cloudflare Token も同じ管理ポリシーで扱う。
 
 ### 2.2 反映対象（最小セット）
 - backend
@@ -59,13 +69,15 @@
 5. `make production-smoke` で正常性を確認する。
 
 ## 3. ネットワーク/接続方針
-- `client` は公開（80/443）する。
+- Browser の公開入口は Cloudflare のみとする。
+- Cloudflare から `client`（Fly Origin）への接続は HTTPS を前提にする。
 - `backend` は Fly 内部通信専用（公開ポートなし）とし、`client` から `*.internal` 経由で接続する。
 - `backend -> Neon` は TLS 必須（`DATABASE_URL` に `sslmode=require` を含める）。
-- DB 接続障害時は以下順で確認する。
-1. Fly 上の `backend` 起動状態
-2. `DATABASE_URL` の誤設定（ホスト/資格情報/`sslmode`）
-3. Neon 側の接続制限・障害情報
+- 接続障害時は以下順で確認する。
+1. Cloudflare 側の障害情報・ルール変更履歴（WAF/Rate Limit/Cache）
+2. Fly 上の `client` / `backend` の起動状態
+3. `BACKEND_GRPC_ADDRESS` と `DATABASE_URL` の誤設定
+4. Neon 側の接続制限・障害情報
 
 ## 4. デプロイ手順（標準）
 
@@ -85,6 +97,10 @@ make production-deploy
 3. backend デプロイ
 4. client デプロイ
 5. スモークチェック（既定 `RUN_SMOKE_CHECK=true`）
+
+補足:
+- `DEPLOY_CLIENT_BASE_URL` は Cloudflare 配下の公開URL（例: `https://history-quiz.example.com`）を設定する。
+- `*.fly.dev` を本番ユーザー導線として扱わない。
 
 ### 4.3 Authentik も同時デプロイする場合
 ```bash
@@ -110,7 +126,12 @@ flyctl releases rollback <release-id> --app <app-name>
 ```
 3. `make production-smoke` で復旧確認する。
 
-### 5.2 DB 障害時（Neon restore）
+### 5.2 Cloudflare 設定切り戻し
+1. Cloudflare の監査ログで直近変更（WAF/Rate Limit/Cache/DNS）を特定する。
+2. 影響が疑われるルールを前回の安定設定へ戻す（または一時的に無効化する）。
+3. `curl -I` と `make production-smoke` で復旧確認する。
+
+### 5.3 DB 障害時（Neon restore）
 1. 影響範囲確定まで書き込みを停止する。
 2. Neon の復元ポイントから復元先ブランチ/インスタンスを作成する。
 3. 復元先の接続文字列へ `DATABASE_URL` を更新し、`make production-sync-secrets` を実行する。
@@ -118,6 +139,8 @@ flyctl releases rollback <release-id> --app <app-name>
 5. 原因に対する `forward fix` migration を準備し、再発防止策を記録する。
 
 ## 6. 定期運用チェックリスト
+- [ ] Cloudflare の DNS Proxy / TLS (`Full (strict)`) / HTTPS 強制を週次確認した
+- [ ] Cloudflare の WAF / Rate Limit / Cache ルール変更履歴を確認した
 - [ ] Fly.io のアプリ状態を週次確認した
 - [ ] Fly.io の usage / billing を週次確認した
 - [ ] 月次予算に対する消化率と増加率（前週比）を確認した
@@ -169,7 +192,7 @@ flyctl releases rollback <release-id> --app <app-name>
 - `OIDC_ISSUER_URL`
 - `OIDC_CLIENT_ID`
 - `OIDC_REDIRECT_URI`
-- `DEPLOY_CLIENT_BASE_URL`（スモークチェック対象URL）
+- `DEPLOY_CLIENT_BASE_URL`（Cloudflare 配下のスモークチェック対象URL）
 
 ### 8.5 任意 Variables（必要時のみ）
 - `OIDC_SCOPES`
@@ -182,36 +205,45 @@ flyctl releases rollback <release-id> --app <app-name>
 - `AUTHENTIK_POSTGRES_USER`
 - `AUTHENTIK_POSTGRES_DB`
 
-## 9. Fly.io コスト管理
+### 8.6 Cloudflare API 自動化を行う場合
+- 追加 Secrets: `CLOUDFLARE_API_TOKEN`
+- 追加 Variables: `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_PUBLIC_HOSTNAME`
+
+## 9. Fly.io + Cloudflare コスト管理
 
 ### 9.1 主要なコスト増大リスク
-- 常時起動設定による固定費の高止まり
+- Fly 常時起動設定による固定費の高止まり
   - `client` は `min_machines_running = 1`
   - `backend` は `auto_stop_machines = "off"` かつ `min_machines_running = 1`
 - `main` push 起点の staging 自動デプロイによる remote build 回数増加
 - migration / smoke の既定有効によるデプロイ付随コスト増加
 - `DEPLOY_AUTHENTIK=true` 運用時のアプリ増分固定費
+- Cloudflare の有料ルール（WAF/Rate Limit）利用量増加
 - 予算アラート未整備時の検知遅延
 
 ### 9.2 コスト対応方針
-1. 監視とアラートを先に整備する（予算と増加率を可視化する）。
-2. staging から段階的に常時起動設定を見直し、固定費を最適化する。
+1. 監視とアラートを先に整備する（Fly/Cloudflare の予算と増加率を可視化する）。
+2. staging から段階的に常時起動設定を見直し、Fly 固定費を最適化する。
 3. 自動デプロイ条件を必要最小限にし、デプロイ回数を抑制する。
 4. `run_migrations` / `run_smoke_check` を変更種別で使い分け、不要実行を削減する。
 5. Authentik は稼働要否を環境ごとに明示し、不要環境では停止または分離運用する。
+6. Cloudflare ルールは効果測定を行い、不要ルールを残さない。
 
 ### 9.3 週次モニタリング手順
 1. Fly.io ダッシュボードで `Usage` / `Billing` を確認し、前週比と月次累計を記録する。
-2. 監視ログに以下を残す。
+2. Cloudflare ダッシュボードでリクエスト数、WAF ブロック数、課金対象機能の使用量を確認する。
+3. 監視ログに以下を残す。
   - 週次コスト
   - 月次累計
   - 前週比
   - デプロイ回数
-3. 以下の閾値で判定する。
+  - Cloudflare 主要ルールのヒット数
+4. 以下の閾値で判定する。
   - 警告: 前週比 `+20%` 超、または月次予算消化率 `80%` 超
   - 重大: 月次予算超過見込み（予測 `100%` 超）
-4. 閾値超過時はエスカレーションを実施する。
+5. 閾値超過時はエスカレーションを実施する。
   - `production` 責任者へ即時共有
   - staging の自動デプロイ頻度を一時的に抑制
   - staging の `min_machines_running` / `auto_stop_machines` 見直しを優先実施
   - 不要な migration / smoke 実行を停止
+  - Cloudflare ルールの高コスト設定を段階的に見直す

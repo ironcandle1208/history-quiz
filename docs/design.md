@@ -15,7 +15,7 @@ history-quiz は「クイズを解く（正誤判定・連続出題）」と「�
 
 ### Technical Standards (tech.md)
 `docs/tech.md` に定義した方針に合わせ、本設計では以下の標準を採用する。
-- API 仕様は「HTTP（Browser→Remix） + gRPC（Remix→Backend）」の2層を前提に、契約（スキーマ）を最優先で固定する
+- API 仕様は「HTTP（Browser→Cloudflare→Remix） + gRPC（Remix→Backend）」の2層を前提に、契約（スキーマ）を最優先で固定する
 - 認証は Remix のセッション管理（Cookie）を採用し、ユーザー識別子を gRPC の metadata 等でバックエンドへ伝播する
 - 入力バリデーションはサーバー側で必須
   - Remix は `zod` + `conform` による一次検証を行い、ユーザーに分かりやすい形でフィールドエラーを返す
@@ -41,10 +41,11 @@ Phase1 で以下の共通コンポーネントを実装し、機能間で再利�
 ### Integration Points
 - **Database/Storage**: 4択問題、解答履歴、作成問題の永続化（PostgreSQL / Neon）
 - **Authentication**: Authentik（OIDC）と連携し、Remix がセッション（Cookie）を保持する
+- **Edge/Proxy**: Cloudflare を前段に置き、Fly 上の `client` を Origin として公開する
 
 ## Architecture
 
-ブラウザの UI 操作は HTTP で Remix（SSR サーバー）に集約し、Remix が gRPC で Go バックエンドへ委譲する。  
+ブラウザの UI 操作は Cloudflare（CDN/WAF/Reverse Proxy）を経由して Fly 上の Remix（SSR サーバー）に到達し、Remix が gRPC で Go バックエンドへ委譲する。  
 Remix は「認証・ルーティング/SSR・入出力整形・入力バリデーション・gRPC 呼び出し」に責務を限定し、クイズ判定や認可を含むビジネスルールはバックエンドに寄せる。
 
 ### Architecture Style
@@ -58,7 +59,8 @@ Remix は「認証・ルーティング/SSR・入出力整形・入力バリデ�
 ```mermaid
 graph TD
   U[User] -->|Web UI| C[Browser]
-  C -->|HTTP| R[Remix App<br/>(SSR + BFF)]
+  C -->|HTTPS| F[Cloudflare<br/>(Proxy/CDN/WAF)]
+  F -->|HTTPS (Origin)| R[Remix App on Fly.io<br/>(SSR + BFF)]
   R -->|gRPC| B[Go Backend]
   B -->|SQL| D[(Database)]
   R -->|OIDC| A[Authentik<br/>(OIDC Provider)]
@@ -66,6 +68,7 @@ graph TD
 
 %% 備考:
 %% - Phase1 は Cookie（署名付き）でセッションを保持し、サーバー側の別ストアは使わない
+%% - 公開エンドポイントは Cloudflare 配下のドメインを正とし、Fly は Origin として維持する
 ```
 
 ### Modular Design Principles
@@ -89,6 +92,14 @@ Remix は以下の分割を基本とする。
 
 ## Components and Interfaces
 
+### Cloudflare（Edge / Reverse Proxy）
+- **Purpose:** インターネット公開の入口として TLS 終端、WAF、レート制限、キャッシュ制御を担う
+- **Interfaces:**
+  - Browser からの HTTPS リクエスト受け付け
+  - Fly Origin（`client`）へのプロキシ転送
+- **Dependencies:** Cloudflare DNS / TLS 設定、Origin 側の証明書ポリシー
+- **Reuses:** なし（マネージド機能を利用）
+
 ### Remix App（Web / SSR + BFF）
 - **Purpose:** クイズ出題・回答、問題作成/編集、マイページ表示、認証、入力バリデーション、gRPC 委譲
 - **Interfaces（HTTP 例）:**
@@ -101,7 +112,7 @@ Remix は以下の分割を基本とする。
   - `GET /me`：マイページ（履歴・正答率・作成問題一覧）
   - `GET /login`：OIDC 認証開始（未ログイン時は Authentik へリダイレクト）
   - `GET /auth/callback`：OIDC コールバック処理
-- **Dependencies:** セッション管理（Cookie）、gRPC クライアント、エラー変換
+- **Dependencies:** セッション管理（Cookie）、gRPC クライアント、エラー変換、Cloudflare 経由ヘッダの取り扱い
 - **Reuses:** 認証/セッション共通サービス、gRPC クライアント共通サービス、入力スキーマ
 
 ### Authentik（OIDC Provider）

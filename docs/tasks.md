@@ -327,3 +327,36 @@
   - _Leverage: `docs/tech.md`（Known Limitations, Error Handling Standards）, `docs/Phase1/security-checklist.md`（requestId）_
   - _Requirements: Reliability, Performance, Security（NFR）_
   - _Prompt: Role: SRE-minded Full-stack Engineer | Task: Introduce baseline observability for Remix and Go backend and document alert/runbook essentials | Restrictions: Start small; avoid over-instrumentation | Success: Core metrics and logs are visible, and alerting catches major regressions_
+
+- [ ] 35. Cloudflare 前段構成の基盤設定を IaC 化する（DNS/TLS/Cache 基本ルール）
+  - File: `infra/cloudflare/*`（新規）, `docs/Phase2/production-operations.md`（更新）
+  - Include:
+    - 公開レコードの `Proxied` 設定（Fly Origin を参照）
+    - `Always Use HTTPS` と `SSL/TLS: Full (strict)` の固定化
+    - 動的ページ `Bypass Cache` / 静的配信キャッシュの基本ルール
+  - Purpose: Cloudflare 手動設定のドリフトを防ぎ、再現可能な環境構築手順にする
+  - _Leverage: `docs/design.md`（Architecture）, `docs/tech.md`（Deployment Notes）, `docs/Phase2/production-operations.md`_
+  - _Requirements: Security（NFR）, Reliability（NFR）_
+  - _Prompt: Role: Platform Engineer | Task: Define Cloudflare baseline configuration as code and align runbook; ensure Fly remains origin behind Cloudflare | Restrictions: Keep initial rule-set minimal and auditable | Success: New environment can reproduce the same Cloudflare edge behavior without manual drift_
+
+- [ ] 36. Cloudflare エッジ防御（WAF/Rate Limit）を導入し、状態変更系 POST を保護する
+  - File: `infra/cloudflare/*`（更新）, `docs/security.md`（更新）, `docs/Phase2/production-operations.md`（更新）
+  - Include:
+    - `/login`, `/quiz`, `/questions/new`, `/questions/*/edit` へのレート制限
+    - WAF ルール（Bot/悪性IP/異常パターン）の最小セット
+    - ブロック/チャレンジ時の運用手順と誤検知時の緩和手順
+  - Purpose: Fly Origin へ到達する前段で悪性トラフィックを削減し、アプリ層の負荷と攻撃面を抑える
+  - _Leverage: `docs/security.md`, `docs/Phase1/security-checklist.md`_
+  - _Requirements: Security（NFR）_
+  - _Prompt: Role: Security Engineer | Task: Apply Cloudflare WAF and rate-limit policies for high-risk routes and document run/rollback procedures | Restrictions: Avoid blocking normal user flows; provide measurable thresholds | Success: Abuse traffic is throttled/blocked at edge and false positives are operationally manageable_
+
+- [ ] 37. デプロイ検証を Cloudflare 経由ドメイン中心へ切り替える（CI/Smoke）
+  - File: `scripts/production_preflight.sh`（更新）, `scripts/production_smoke_check.sh`（更新）, `.github/workflows/deploy-fly.yml`（更新）
+  - Include:
+    - `DEPLOY_CLIENT_BASE_URL` を Cloudflare 公開URLに統一
+    - スモークテストで HTTPS リダイレクト、キャッシュバイパス対象、主要導線を検証
+    - 必要に応じて Origin 直疎通チェックを別ジョブ化（障害切り分け用途）
+  - Purpose: 本番利用経路と同じ導線でデプロイ妥当性を確認し、Cloudflare 設定不備を早期検知する
+  - _Leverage: `docs/Phase2/production-operations.md`, `.github/workflows/deploy-fly.yml`_
+  - _Requirements: Reliability（NFR）, Security（NFR）_
+  - _Prompt: Role: DevOps Engineer | Task: Update deployment checks to validate service availability through Cloudflare-fronted hostname while keeping Fly origin troubleshooting path | Restrictions: Keep CI runtime practical; avoid flaky network checks | Success: CI detects edge misconfigurations before production impact and preserves fast rollback diagnostics_
