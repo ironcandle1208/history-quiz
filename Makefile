@@ -1,4 +1,4 @@
-.PHONY: help db-setup db-up db-down db-reset backend-run client-run
+.PHONY: help db-setup db-up db-down db-reset backend-run client-run production-preflight production-sync-secrets production-deploy production-smoke
 
 # アプリDB 用 docker compose ファイルのパスを定義する。
 LOCAL_DB_COMPOSE_FILE := docker-compose.local-db.yml
@@ -14,6 +14,10 @@ help:
 	@echo "  make db-reset # ローカルのアプリDB(Postgres)を停止し、ボリュームも削除"
 	@echo "  make backend-run # backend/.env 読み込み後に Go gRPC サーバーを起動"
 	@echo "  make client-run  # client/.env 準備後に Remix 開発サーバーを起動"
+	@echo "  make production-preflight   # 本番デプロイ前チェックを実行"
+	@echo "  make production-sync-secrets # Fly.io へ Secrets/設定値を反映"
+	@echo "  make production-deploy      # migration + Fly.io デプロイ + スモークチェック"
+	@echo "  make production-smoke       # 本番スモークチェックのみ実行"
 
 db-setup:
 	# アプリDBの起動、環境変数ファイル準備、マイグレーション適用を一括実行する。
@@ -38,3 +42,19 @@ backend-run:
 client-run:
 	# client 環境変数の準備と Remix 開発サーバー起動を一括実行する。
 	@./scripts/run_client_remix_dev.sh
+
+production-preflight:
+	# 本番デプロイ前に必須コマンド・設定ファイル・環境変数を検証する。
+	@./scripts/production_preflight.sh
+
+production-sync-secrets:
+	# Fly.io の各アプリへ Secrets/設定値を反映する。
+	@./scripts/production_sync_fly_secrets.sh
+
+production-deploy:
+	# migration 適用、Fly.io デプロイ、スモークチェックを一括実行する。
+	@./scripts/deploy_production_fly.sh
+
+production-smoke:
+	# デプロイ後の最小ヘルスチェックを実行する。
+	@./scripts/production_smoke_check.sh

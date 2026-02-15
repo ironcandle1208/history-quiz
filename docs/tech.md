@@ -82,16 +82,28 @@
 ## Deployment & Distribution (if applicable)
 - **Target Platform(s)**: `Fly.io`（Remix / Go Backend / Authentik をコンテナとしてデプロイ）
 - **Distribution Method**: Web 配信（HTTPS）
-- **Update Mechanism**: GitHub Actions 等のCIからコンテナをビルドしてデプロイ（詳細は実装で確定）
+- **Update Mechanism**: `scripts/production_preflight.sh` / `scripts/production_sync_fly_secrets.sh` / `scripts/deploy_production_fly.sh` を共通手順とし、GitHub Actions（`.github/workflows/deploy-fly.yml`）から `staging` 自動・`production` 手動承認で実行する
 
 ### Deployment Notes
 - **Remix**: Fly.io のアプリとしてデプロイ（SSR + BFF）
+  - Dockerfile: `client/Dockerfile`
+  - Fly 設定: `infra/fly/client.fly.toml`
 - **Go Backend**: Fly.io のアプリとしてデプロイ（gRPC サーバー）
+  - Dockerfile: `backend/Dockerfile`
+  - Fly 設定: `infra/fly/backend.fly.toml`
+  - 公開ポートは持たず、`*.internal` 経由の内部通信を前提にする
 - **Authentik**:
   - Fly.io 上でコンテナとして稼働させる
   - Authentik 用の Postgres/Redis は Fly.io のマネージド Postgres/Redis 等で別途用意する（アプリDBの Neon とは別）
   - Authentik の設定（OIDC Provider / Application / Flow 等）は Blueprints 等でコード化し、リポジトリで管理する（手作業設定の属人化を避ける）
 - **Neon**: アプリ用の PostgreSQL として利用する（`backend` から接続）
+  - `DATABASE_URL` は `sslmode=require` を必須とする
+  - マイグレーション適用は `scripts/apply_db_migrations.sh` を利用する
+
+### Production Runbook
+- 本番運用の単一Runbookは `docs/Phase2/production-operations.md` を参照する。
+- Fly アプリ名・設定ファイルは `infra/fly/apps.env` で管理する。
+- デプロイ前後は `make production-preflight` / `make production-smoke` で確認する。
 
 ### Authentik Ops（リソース管理とバックアップ）
 Fly.io 上で Authentik を運用する際は、以下を早期に確定する。
@@ -195,7 +207,7 @@ JSON で返す場合は、以下の形を基本とする（実装でキー名は
 13. **`deleted_at`（論理削除）**: 解答履歴/正答率の整合性を壊さず、運用上の削除ニーズに対応するため
 
 ## Known Limitations
-- Neon/Fly.io の具体設定（VPC/ネットワーク、環境変数、シークレット、デプロイ手順）は実装フェーズで確定し、本ドキュメントを更新する
 - 監視・可観測性（メトリクス/トレース）は初期スコープ外（必要に応じて追加）
 - Authentik をセルフホストする場合、Authentik 用の Postgres/Redis を別途運用する必要がある（アプリDBの Neon とは別）
+- Authentik の Fly.io 本番 `fly.toml` は環境依存（外部DB/Redis構成）なので、本リポジトリではテンプレート未同梱
 - `Pagination.page_token` / `PageInfo.next_page_token` は proto 定義済みだが、Phase1 実装では未対応（常に空）

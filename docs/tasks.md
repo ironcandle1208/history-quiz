@@ -306,7 +306,7 @@
   - _Requirements: 5.3_
   - _Prompt: Role: DevOps + Database Engineer | Task: Finalize migration tooling and establish local/CI/prod workflows with clear rollback guidance | Restrictions: Keep workflow simple and auditable | Success: Team can apply and verify migrations consistently across environments_
 
-- [ ] 33. 本番運用詳細（Fly.io/Neon/Secrets/Deploy）を確定し、手順をコード化する
+- [x] 33. 本番運用詳細（Fly.io/Neon/Secrets/Deploy）を確定し、手順をコード化する
   - File: `docs/Phase2/production-operations.md`（新規）, `infra/*`（必要に応じて追加/更新）, `docs/tech.md`（更新）
   - Include:
     - 環境変数/シークレット管理ポリシー

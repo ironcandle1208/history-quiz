@@ -1,0 +1,210 @@
+name: deploy-fly
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "client/**"
+      - "proto/**"
+      - "infra/fly/**"
+      - "scripts/**"
+      - "Makefile"
+      - ".dockerignore"
+      - ".github/workflows/deploy-fly.yml"
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "デプロイ先環境"
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+      run_migrations:
+        description: "デプロイ前に migration を実行する"
+        required: true
+        default: true
+        type: boolean
+      run_smoke_check:
+        description: "デプロイ後にスモークチェックを実行する"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  deploy-staging:
+    # main push は staging へ自動デプロイ。
+    # 手動実行でも target_environment=staging を選べるようにする。
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target_environment == 'staging')
+    runs-on: ubuntu-latest
+    environment: staging
+    concurrency:
+      # staging への同時デプロイを防止する。
+      group: deploy-fly-staging
+      cancel-in-progress: false
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      # Fly.io アプリ設定（Environment variables を想定）
+      FLY_CLIENT_APP: ${{ vars.FLY_CLIENT_APP }}
+      FLY_BACKEND_APP: ${{ vars.FLY_BACKEND_APP }}
+      FLY_CLIENT_CONFIG: ${{ vars.FLY_CLIENT_CONFIG }}
+      FLY_BACKEND_CONFIG: ${{ vars.FLY_BACKEND_CONFIG }}
+      FLY_AUTHENTIK_APP: ${{ vars.FLY_AUTHENTIK_APP }}
+      FLY_AUTHENTIK_CONFIG: ${{ vars.FLY_AUTHENTIK_CONFIG }}
+      DEPLOY_AUTHENTIK: ${{ vars.DEPLOY_AUTHENTIK }}
+
+      # Secrets（Environment secrets を想定）
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+      OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
+      AUTHENTIK_SECRET_KEY: ${{ secrets.AUTHENTIK_SECRET_KEY }}
+      AUTHENTIK_POSTGRES_PASSWORD: ${{ secrets.AUTHENTIK_POSTGRES_PASSWORD }}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${{ secrets.AUTHENTIK_BOOTSTRAP_PASSWORD }}
+
+      # 非秘密設定（Environment variables を想定）
+      OIDC_ISSUER_URL: ${{ vars.OIDC_ISSUER_URL }}
+      OIDC_CLIENT_ID: ${{ vars.OIDC_CLIENT_ID }}
+      OIDC_REDIRECT_URI: ${{ vars.OIDC_REDIRECT_URI }}
+      BACKEND_GRPC_ADDRESS: ${{ vars.BACKEND_GRPC_ADDRESS }}
+      OIDC_SCOPES: ${{ vars.OIDC_SCOPES }}
+      BACKEND_GRPC_TIMEOUT_MS: ${{ vars.BACKEND_GRPC_TIMEOUT_MS }}
+      BACKEND_GRPC_TLS: ${{ vars.BACKEND_GRPC_TLS }}
+      GRPC_PROTO_ROOT: ${{ vars.GRPC_PROTO_ROOT }}
+      DEPLOY_CLIENT_BASE_URL: ${{ vars.DEPLOY_CLIENT_BASE_URL }}
+      AUTHENTIK_POSTGRES_USER: ${{ vars.AUTHENTIK_POSTGRES_USER }}
+      AUTHENTIK_POSTGRES_DB: ${{ vars.AUTHENTIK_POSTGRES_DB }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@v1
+
+      - name: Install psql client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Prepare infra/fly/apps.env
+        run: |
+          # スクリプト群が参照する apps.env を CI 上で組み立てる。
+          cat > infra/fly/apps.env <<EOF_APPS
+          FLY_CLIENT_APP=${FLY_CLIENT_APP}
+          FLY_BACKEND_APP=${FLY_BACKEND_APP}
+          FLY_CLIENT_CONFIG=${FLY_CLIENT_CONFIG}
+          FLY_BACKEND_CONFIG=${FLY_BACKEND_CONFIG}
+          BACKEND_GRPC_ADDRESS=${BACKEND_GRPC_ADDRESS}
+          EOF_APPS
+
+          if [ -n "${FLY_AUTHENTIK_APP:-}" ]; then
+            echo "FLY_AUTHENTIK_APP=${FLY_AUTHENTIK_APP}" >> infra/fly/apps.env
+          fi
+          if [ -n "${FLY_AUTHENTIK_CONFIG:-}" ]; then
+            echo "FLY_AUTHENTIK_CONFIG=${FLY_AUTHENTIK_CONFIG}" >> infra/fly/apps.env
+          fi
+
+      - name: Preflight
+        run: make production-preflight
+
+      - name: Sync Fly secrets
+        run: make production-sync-secrets
+
+      - name: Deploy to staging
+        env:
+          RUN_MIGRATIONS: ${{ github.event_name == 'workflow_dispatch' && inputs.run_migrations || true }}
+          RUN_SMOKE_CHECK: ${{ github.event_name == 'workflow_dispatch' && inputs.run_smoke_check || true }}
+        run: make production-deploy
+
+  deploy-production:
+    # production は手動実行のみ許可し、Environment 側の承認フローを前提にする。
+    if: github.event_name == 'workflow_dispatch' && inputs.target_environment == 'production'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      # production への同時デプロイを防止する。
+      group: deploy-fly-production
+      cancel-in-progress: false
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      # Fly.io アプリ設定（Environment variables を想定）
+      FLY_CLIENT_APP: ${{ vars.FLY_CLIENT_APP }}
+      FLY_BACKEND_APP: ${{ vars.FLY_BACKEND_APP }}
+      FLY_CLIENT_CONFIG: ${{ vars.FLY_CLIENT_CONFIG }}
+      FLY_BACKEND_CONFIG: ${{ vars.FLY_BACKEND_CONFIG }}
+      FLY_AUTHENTIK_APP: ${{ vars.FLY_AUTHENTIK_APP }}
+      FLY_AUTHENTIK_CONFIG: ${{ vars.FLY_AUTHENTIK_CONFIG }}
+      DEPLOY_AUTHENTIK: ${{ vars.DEPLOY_AUTHENTIK }}
+
+      # Secrets（Environment secrets を想定）
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+      OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
+      AUTHENTIK_SECRET_KEY: ${{ secrets.AUTHENTIK_SECRET_KEY }}
+      AUTHENTIK_POSTGRES_PASSWORD: ${{ secrets.AUTHENTIK_POSTGRES_PASSWORD }}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${{ secrets.AUTHENTIK_BOOTSTRAP_PASSWORD }}
+
+      # 非秘密設定（Environment variables を想定）
+      OIDC_ISSUER_URL: ${{ vars.OIDC_ISSUER_URL }}
+      OIDC_CLIENT_ID: ${{ vars.OIDC_CLIENT_ID }}
+      OIDC_REDIRECT_URI: ${{ vars.OIDC_REDIRECT_URI }}
+      BACKEND_GRPC_ADDRESS: ${{ vars.BACKEND_GRPC_ADDRESS }}
+      OIDC_SCOPES: ${{ vars.OIDC_SCOPES }}
+      BACKEND_GRPC_TIMEOUT_MS: ${{ vars.BACKEND_GRPC_TIMEOUT_MS }}
+      BACKEND_GRPC_TLS: ${{ vars.BACKEND_GRPC_TLS }}
+      GRPC_PROTO_ROOT: ${{ vars.GRPC_PROTO_ROOT }}
+      DEPLOY_CLIENT_BASE_URL: ${{ vars.DEPLOY_CLIENT_BASE_URL }}
+      AUTHENTIK_POSTGRES_USER: ${{ vars.AUTHENTIK_POSTGRES_USER }}
+      AUTHENTIK_POSTGRES_DB: ${{ vars.AUTHENTIK_POSTGRES_DB }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@v1
+
+      - name: Install psql client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Prepare infra/fly/apps.env
+        run: |
+          # スクリプト群が参照する apps.env を CI 上で組み立てる。
+          cat > infra/fly/apps.env <<EOF_APPS
+          FLY_CLIENT_APP=${FLY_CLIENT_APP}
+          FLY_BACKEND_APP=${FLY_BACKEND_APP}
+          FLY_CLIENT_CONFIG=${FLY_CLIENT_CONFIG}
+          FLY_BACKEND_CONFIG=${FLY_BACKEND_CONFIG}
+          BACKEND_GRPC_ADDRESS=${BACKEND_GRPC_ADDRESS}
+          EOF_APPS
+
+          if [ -n "${FLY_AUTHENTIK_APP:-}" ]; then
+            echo "FLY_AUTHENTIK_APP=${FLY_AUTHENTIK_APP}" >> infra/fly/apps.env
+          fi
+          if [ -n "${FLY_AUTHENTIK_CONFIG:-}" ]; then
+            echo "FLY_AUTHENTIK_CONFIG=${FLY_AUTHENTIK_CONFIG}" >> infra/fly/apps.env
+          fi
+
+      - name: Preflight
+        run: make production-preflight
+
+      - name: Sync Fly secrets
+        run: make production-sync-secrets
+
+      - name: Deploy to production
+        env:
+          RUN_MIGRATIONS: ${{ inputs.run_migrations }}
+          RUN_SMOKE_CHECK: ${{ inputs.run_smoke_check }}
+        run: make production-deploy

@@ -1,0 +1,15 @@
+# Git 管理情報はイメージに不要なため除外する。
+.git
+
+# ローカル依存物はイメージビルドに不要なため除外する。
+**/node_modules
+**/.pnpm-store
+
+# 生成物は Dockerfile 内で再生成するため除外する。
+client/build
+client/public/build
+
+# 開発用ログ/一時ディレクトリを除外する。
+.walkthrough
+.tmp-proto-test
+.spec-workflow
