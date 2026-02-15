@@ -119,6 +119,8 @@ flyctl releases rollback <release-id> --app <app-name>
 
 ## 6. 定期運用チェックリスト
 - [ ] Fly.io のアプリ状態を週次確認した
+- [ ] Fly.io の usage / billing を週次確認した
+- [ ] 月次予算に対する消化率と増加率（前週比）を確認した
 - [ ] Neon のバックアップ/復元ポイントを確認した
 - [ ] Secrets のローテーション期限を確認した
 - [ ] Runbook 通りにステージング相当リハーサルを実施した
@@ -179,3 +181,37 @@ flyctl releases rollback <release-id> --app <app-name>
 - `FLY_AUTHENTIK_CONFIG`
 - `AUTHENTIK_POSTGRES_USER`
 - `AUTHENTIK_POSTGRES_DB`
+
+## 9. Fly.io コスト管理
+
+### 9.1 主要なコスト増大リスク
+- 常時起動設定による固定費の高止まり
+  - `client` は `min_machines_running = 1`
+  - `backend` は `auto_stop_machines = "off"` かつ `min_machines_running = 1`
+- `main` push 起点の staging 自動デプロイによる remote build 回数増加
+- migration / smoke の既定有効によるデプロイ付随コスト増加
+- `DEPLOY_AUTHENTIK=true` 運用時のアプリ増分固定費
+- 予算アラート未整備時の検知遅延
+
+### 9.2 コスト対応方針
+1. 監視とアラートを先に整備する（予算と増加率を可視化する）。
+2. staging から段階的に常時起動設定を見直し、固定費を最適化する。
+3. 自動デプロイ条件を必要最小限にし、デプロイ回数を抑制する。
+4. `run_migrations` / `run_smoke_check` を変更種別で使い分け、不要実行を削減する。
+5. Authentik は稼働要否を環境ごとに明示し、不要環境では停止または分離運用する。
+
+### 9.3 週次モニタリング手順
+1. Fly.io ダッシュボードで `Usage` / `Billing` を確認し、前週比と月次累計を記録する。
+2. 監視ログに以下を残す。
+  - 週次コスト
+  - 月次累計
+  - 前週比
+  - デプロイ回数
+3. 以下の閾値で判定する。
+  - 警告: 前週比 `+20%` 超、または月次予算消化率 `80%` 超
+  - 重大: 月次予算超過見込み（予測 `100%` 超）
+4. 閾値超過時はエスカレーションを実施する。
+  - `production` 責任者へ即時共有
+  - staging の自動デプロイ頻度を一時的に抑制
+  - staging の `min_machines_running` / `auto_stop_machines` 見直しを優先実施
+  - 不要な migration / smoke 実行を停止
