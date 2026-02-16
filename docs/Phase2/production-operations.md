@@ -21,6 +21,13 @@
 - `FLY_CLIENT_CONFIG`
 - `FLY_BACKEND_CONFIG`
 - `BACKEND_GRPC_ADDRESS`（`<backend-app>.internal:50051`）
+3. `FLY_CLIENT_CONFIG` / `FLY_BACKEND_CONFIG` は環境ごとに使い分ける。
+- staging（コスト最適化）:
+  - `infra/fly/client.fly.toml`（`min_machines_running=0`）
+  - `infra/fly/backend.fly.toml`（`auto_stop_machines="stop"`, `min_machines_running=0`）
+- production（常時起動を維持する場合）:
+  - `infra/fly/client.production.fly.toml`
+  - `infra/fly/backend.production.fly.toml`
 
 ### 1.2 Cloudflare 設定（公開経路）
 1. `infra/cloudflare/terraform.tfvars.example` を `infra/cloudflare/terraform.tfvars` としてコピーする。
@@ -203,6 +210,10 @@ flyctl releases rollback <release-id> --app <app-name>
   - `target_environment=staging|production` を手動選択してデプロイ
   - `run_migrations` / `run_smoke_check` を切り替え可能
   - `run_origin_direct_check` を有効化すると Origin 直疎通チェックを別ジョブで実行
+  - `deploy_authentik` を有効化した場合のみ Authentik を同時デプロイ
+- `push`（`main`）時の staging デプロイ:
+  - 変更ファイルから `RUN_MIGRATIONS` / `RUN_SMOKE_CHECK` を自動判定する
+  - `DEPLOY_AUTHENTIK=false` を固定し、固定費増大を防止する
 
 ### 8.2 Environment（GitHub）設定
 - Environment は `staging` / `production` を作成する。
@@ -234,12 +245,15 @@ flyctl releases rollback <release-id> --app <app-name>
 - `BACKEND_GRPC_TIMEOUT_MS`
 - `BACKEND_GRPC_TLS`
 - `GRPC_PROTO_ROOT`
-- `DEPLOY_AUTHENTIK`
 - `FLY_AUTHENTIK_APP`
 - `FLY_AUTHENTIK_CONFIG`
 - `DEPLOY_CLIENT_ORIGIN_BASE_URL`（障害切り分け用の Fly Origin URL）
 - `AUTHENTIK_POSTGRES_USER`
 - `AUTHENTIK_POSTGRES_DB`
+
+補足:
+- GitHub Actions では `DEPLOY_AUTHENTIK` ではなく `workflow_dispatch` 入力 `deploy_authentik` を利用する。
+- staging の自動デプロイでは `DEPLOY_AUTHENTIK=false` 固定。
 
 ### 8.6 Cloudflare IaC 実行時の追加設定
 - 追加 Secrets: `CLOUDFLARE_API_TOKEN`
@@ -253,8 +267,8 @@ flyctl releases rollback <release-id> --app <app-name>
 
 ### 9.1 主要なコスト増大リスク
 - Fly 常時起動設定による固定費の高止まり
-  - `client` は `min_machines_running = 1`
-  - `backend` は `auto_stop_machines = "off"` かつ `min_machines_running = 1`
+  - 既定設定は `min_machines_running = 0` / `auto_stop_machines = "stop"` へ最適化済み
+  - production で常時起動用設定（`*.production.fly.toml`）を使う場合は固定費増加と可用性のトレードオフを評価する
 - `main` push 起点の staging 自動デプロイによる remote build 回数増加
 - migration / smoke の既定有効によるデプロイ付随コスト増加
 - `DEPLOY_AUTHENTIK=true` 運用時のアプリ増分固定費
@@ -287,3 +301,6 @@ flyctl releases rollback <release-id> --app <app-name>
   - staging の `min_machines_running` / `auto_stop_machines` 見直しを優先実施
   - 不要な migration / smoke 実行を停止
   - Cloudflare ルールの高コスト設定を段階的に見直す
+
+記録テンプレート:
+- `docs/Phase2/cost-monitoring.md` の「週次記録テンプレート」を利用する。

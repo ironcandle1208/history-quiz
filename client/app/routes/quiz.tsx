@@ -19,6 +19,7 @@ import { getQuestion, submitAnswer } from "../grpc/quiz.server";
 import { quizAnswerFormSchema, resolveQuizChoiceFieldError } from "../schemas/quiz";
 import { CSRF_TOKEN_FIELD_NAME, issueCsrfToken, verifyCsrfToken } from "../services/csrf.server";
 import { normalizeGrpcHttpError, throwGrpcErrorResponse } from "../services/grpc-error.server";
+import { assertRequestContentLengthWithinLimit } from "../services/request-size.server";
 import { getUser } from "../services/session.server";
 
 type LoaderData = {
@@ -26,6 +27,7 @@ type LoaderData = {
   question: QuizQuestion;
   requestId: string;
 };
+const QUIZ_ACTION_MAX_BODY_BYTES = 8 * 1024;
 
 type ActionData =
   | {
@@ -99,8 +101,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
 // action は回答送信を受けて判定結果を返す。
 export async function action({ request }: ActionFunctionArgs) {
   const user = await getUser(request);
+  const { requestId } = assertRequestContentLengthWithinLimit({
+    maxBytes: QUIZ_ACTION_MAX_BODY_BYTES,
+    request,
+  });
   const formData = await request.formData();
-  const { requestId } = await verifyCsrfToken({ formData, request });
+  const { requestId: verifiedRequestId } = await verifyCsrfToken({ formData, request, requestId });
   const submission = parseWithZod(formData, { schema: quizAnswerFormSchema });
   if (submission.status !== "success") {
     const selectedChoiceId = toOptionalTrimmedString(formData.get("choiceId"));
@@ -110,13 +116,13 @@ export async function action({ request }: ActionFunctionArgs) {
       {
         ok: false,
         message: questionIdError ?? "入力内容を確認してください。",
-        requestId,
+        requestId: verifiedRequestId,
         selectedChoiceId,
         fieldErrors: {
           choiceId: choiceIdError,
         },
       },
-      { status: 400, headers: { "x-request-id": requestId } },
+      { status: 400, headers: { "x-request-id": verifiedRequestId } },
     );
   }
   const questionId = submission.value.questionId;
@@ -124,7 +130,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     const result = await submitAnswer({
-      callContext: { requestId, userId: user?.userId },
+      callContext: { requestId: verifiedRequestId, userId: user?.userId },
       request: {
         questionId,
         selectedChoiceId,
@@ -151,7 +157,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const normalized = normalizeGrpcHttpError({
       error,
       fallbackMessage: "回答の送信に失敗しました。時間をおいて再試行してください。",
-      requestId,
+      requestId: verifiedRequestId,
     });
     return json<ActionData>(
       {

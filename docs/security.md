@@ -1,21 +1,23 @@
 # セキュリティリスクチェックリスト（L7 / HTTP）
 
 最終更新日: 2026-02-16
+ステータス: 今回判明したリスクおよび Fly.io コスト運用リスクの対応は完了（2026-02-16）
 
 ## 今回判明したリスク
 
-- [ ] `中` 共通セキュリティヘッダが未整備
+- [x] `中` 共通セキュリティヘッダが未整備（2026-02-16 解消）
   - 想定影響: クリックジャッキング、XSS被害拡大、意図しない情報送信を抑止しづらい。
+  - 対応内容: `entry.server.tsx` で `Content-Security-Policy` / `X-Frame-Options` / `X-Content-Type-Options` / `Referrer-Policy` / `Permissions-Policy` / `Strict-Transport-Security` を共通付与した。
   - 確認箇所: `client/app/entry.server.tsx`
-  - 補足: `Content-Type` 以外（`Content-Security-Policy`、`X-Frame-Options` or `frame-ancestors`、`X-Content-Type-Options`、`Referrer-Policy`、`Permissions-Policy`、`Strict-Transport-Security`）が未設定。
 
 - [x] `中` レート制限・スロットリングが未導入（2026-02-16 解消）
   - 対応内容: `infra/cloudflare` の Terraform で状態変更系 `POST` 向けレート制限を導入した。
   - 確認箇所: `infra/cloudflare/main.tf`, `infra/cloudflare/variables.tf`, `docs/Phase2/production-operations.md`
 
-- [ ] `中` HTTPリクエストボディサイズの上限未設定
+- [x] `中` HTTPリクエストボディサイズの上限未設定（2026-02-16 解消）
   - 想定影響: 大きなフォーム投稿によるメモリ/CPU圧迫のリスク。
-  - 確認箇所: `client/app/routes/quiz.tsx`, `client/app/routes/questions.new.tsx`, `client/app/routes/questions.$id.edit.tsx`
+  - 対応内容: `Content-Length` の共通チェックを追加し、上限超過は `413` で拒否するようにした（`/quiz`: 8KB, `/questions/new` と `/questions/:id/edit`: 32KB）。
+  - 確認箇所: `client/app/services/request-size.server.ts`, `client/app/routes/quiz.tsx`, `client/app/routes/questions.new.tsx`, `client/app/routes/questions.$id.edit.tsx`, `client/app/tests/integration/request-size.server.integration.test.ts`
 
 - [x] `中` Cloudflare 側 HTTPS 強制 / TLS モードの標準化不足（2026-02-16 解消）
   - 対応内容: `infra/cloudflare` の Terraform で `Always Use HTTPS` と `SSL/TLS: Full (strict)` を固定化した。
@@ -63,27 +65,30 @@
 
 ## Fly.io コスト増大リスク（運用）
 
-- [ ] `高` 常時起動設定による固定費高止まりリスク
+- [x] `高` 常時起動設定による固定費高止まりリスク（2026-02-16 解消）
   - 想定影響: 低トラフィック時間帯でも課金が継続し、月次コストが下がりにくい。
-  - 確認箇所: `infra/fly/client.fly.toml`, `infra/fly/backend.fly.toml`
-  - 補足: `client` は `min_machines_running = 1`、`backend` は `auto_stop_machines = "off"` かつ `min_machines_running = 1`。
+  - 対応内容: 既定設定をコスト最適化（`min_machines_running=0`, `auto_stop_machines="stop"`）へ変更し、production 常時起動が必要な場合の専用設定を分離した。
+  - 確認箇所: `infra/fly/client.fly.toml`, `infra/fly/backend.fly.toml`, `infra/fly/client.production.fly.toml`, `infra/fly/backend.production.fly.toml`, `infra/fly/apps.env.example`
 
-- [ ] `高` デプロイ頻度増加によるビルド課金リスク
+- [x] `高` デプロイ頻度増加によるビルド課金リスク（2026-02-16 解消）
   - 想定影響: `main` への更新回数に比例して remote build 実行コストが増える。
   - 確認箇所: `.github/workflows/deploy-fly.yml`, `scripts/deploy_production_fly.sh`
-  - 補足: `push` で staging 自動デプロイ、`flyctl deploy --remote-only` を利用。
+  - 補足: `push` トリガーからテスト/Walkthrough 由来変更を除外し、対象スクリプトを限定した。
 
-- [ ] `中` migration / smoke の既定有効による実行コスト増加リスク
+- [x] `中` migration / smoke の既定有効による実行コスト増加リスク（2026-02-16 解消）
   - 想定影響: デプロイごとの付随処理が増え、CI・実行時間・外部アクセスが積み上がる。
-  - 確認箇所: `.github/workflows/deploy-fly.yml`, `scripts/deploy_production_fly.sh`, `scripts/production_smoke_check.sh`
+  - 対応内容: staging デプロイ時は変更ファイルに応じて `RUN_MIGRATIONS` / `RUN_SMOKE_CHECK` を自動判定するようにした。スキップ時のログも追加した。
+  - 確認箇所: `.github/workflows/deploy-fly.yml`, `scripts/deploy_production_fly.sh`
 
-- [ ] `中` Authentik 同時運用時の追加固定費リスク
+- [x] `中` Authentik 同時運用時の追加固定費リスク（2026-02-16 解消）
   - 想定影響: 認証基盤アプリ分のランニング費が恒常的に増える可能性。
-  - 確認箇所: `docs/Phase2/production-operations.md`, `scripts/deploy_production_fly.sh`
+  - 対応内容: staging 自動デプロイでは `DEPLOY_AUTHENTIK=false` を固定化し、production 手動実行時のみ `deploy_authentik` 入力で有効化できるようにした。
+  - 確認箇所: `.github/workflows/deploy-fly.yml`, `docs/Phase2/production-operations.md`, `scripts/deploy_production_fly.sh`
 
-- [ ] `中` コスト監視・予算アラート運用未整備リスク
+- [x] `中` コスト監視・予算アラート運用未整備リスク（2026-02-16 解消）
   - 想定影響: 異常増加の早期検知が遅れ、請求確定後に気づく運用になる。
-  - 確認箇所: `docs/Phase2/production-operations.md`
+  - 対応内容: 週次監視の閾値・エスカレーション・記録テンプレートを整備した。
+  - 確認箇所: `docs/Phase2/production-operations.md`, `docs/Phase2/cost-monitoring.md`
 
 ## 対応方針（Fly.io コスト）
 

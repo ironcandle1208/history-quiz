@@ -18,6 +18,7 @@ import {
 import { requireAuthenticatedUser } from "../services/auth.server";
 import { CSRF_TOKEN_FIELD_NAME, issueCsrfToken, verifyCsrfToken } from "../services/csrf.server";
 import { normalizeGrpcHttpError } from "../services/grpc-error.server";
+import { assertRequestContentLengthWithinLimit } from "../services/request-size.server";
 
 type LoaderData = {
   csrfToken: string;
@@ -34,6 +35,7 @@ type ActionData = {
   requestId?: string;
   submissionResult?: SubmissionResult<string[]>;
 };
+const QUESTION_CREATE_ACTION_MAX_BODY_BYTES = 32 * 1024;
 
 // loader は未認証アクセスをログインへリダイレクトさせる。
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -50,8 +52,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
 // action は問題作成フォームの入力検証と保存処理を実行する。
 export async function action({ request }: ActionFunctionArgs) {
   const user = await requireAuthenticatedUser(request);
+  const { requestId } = assertRequestContentLengthWithinLimit({
+    maxBytes: QUESTION_CREATE_ACTION_MAX_BODY_BYTES,
+    request,
+  });
   const formData = await request.formData();
-  const { requestId } = await verifyCsrfToken({ formData, request });
+  const { requestId: verifiedRequestId } = await verifyCsrfToken({ formData, request, requestId });
   const submission = parseWithZod(formData, { schema: createQuestionFormSchema });
 
   if (submission.status !== "success") {
@@ -59,16 +65,16 @@ export async function action({ request }: ActionFunctionArgs) {
       {
         ok: false,
         message: "入力内容を確認してください。",
-        requestId,
+        requestId: verifiedRequestId,
         submissionResult: submission.reply(),
       },
-      { status: 400, headers: { "x-request-id": requestId } },
+      { status: 400, headers: { "x-request-id": verifiedRequestId } },
     );
   }
 
   try {
     const result = await createQuestion({
-      callContext: { requestId, userId: user.userId },
+      callContext: { requestId: verifiedRequestId, userId: user.userId },
       request: {
         draft: {
           prompt: submission.value.prompt,
@@ -103,7 +109,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const normalized = normalizeGrpcHttpError({
       error,
       fallbackMessage: "問題の保存に失敗しました。時間をおいて再試行してください。",
-      requestId,
+      requestId: verifiedRequestId,
     });
     const convertedFieldErrors = toQuestionConformFieldErrors(normalized.fieldErrors);
 

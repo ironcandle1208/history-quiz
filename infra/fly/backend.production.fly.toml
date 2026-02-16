@@ -1,4 +1,4 @@
-# Go backend（gRPC）用の Fly.io 設定。
+# Go backend（gRPC）用の Fly.io 設定（production 向け常時起動）。
 # app 名は scripts 側から --app で渡すため、ここでは固定しない。
 
 primary_region = "nrt"
@@ -10,10 +10,10 @@ primary_region = "nrt"
   # backend は Fly 内部通信向けのため公開ポートを定義しない。
   internal_port = 50051
   protocol = "tcp"
-  auto_stop_machines = "stop"
+  auto_stop_machines = "off"
   auto_start_machines = true
-  # 既定はコスト最適化を優先し、必要時のみ起動する。
-  min_machines_running = 0
+  # production は gRPC 応答遅延を抑えるため 1 台常時起動にする。
+  min_machines_running = 1
 
   [[services.tcp_checks]]
     interval = "15s"

@@ -28,6 +28,7 @@ import {
 import { requireAuthenticatedUser } from "../services/auth.server";
 import { CSRF_TOKEN_FIELD_NAME, issueCsrfToken, verifyCsrfToken } from "../services/csrf.server";
 import { normalizeGrpcHttpError, throwGrpcErrorResponse } from "../services/grpc-error.server";
+import { assertRequestContentLengthWithinLimit } from "../services/request-size.server";
 
 type LoaderData = {
   csrfToken: string;
@@ -47,6 +48,7 @@ type ActionData = {
   requestId?: string;
   submissionResult?: SubmissionResult<string[]>;
 };
+const QUESTION_EDIT_ACTION_MAX_BODY_BYTES = 32 * 1024;
 
 // resolveRequiredQuestionId は URL パラメータの問題IDを検証し、空値を拒否する。
 function resolveRequiredQuestionId(id: string | undefined): string {
@@ -125,13 +127,17 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 // action は編集フォーム送信を受け、入力検証と更新保存を実行する。
 export async function action({ params, request }: ActionFunctionArgs) {
   const user = await requireAuthenticatedUser(request);
+  const { requestId } = assertRequestContentLengthWithinLimit({
+    maxBytes: QUESTION_EDIT_ACTION_MAX_BODY_BYTES,
+    request,
+  });
   const formData = await request.formData();
-  const { requestId } = await verifyCsrfToken({ formData, request });
+  const { requestId: verifiedRequestId } = await verifyCsrfToken({ formData, request, requestId });
   const questionId = params.id?.trim();
   if (!questionId) {
     return json<ActionData>(
-      { ok: false, message: "id が指定されていません。", requestId },
-      { status: 400, headers: { "x-request-id": requestId } },
+      { ok: false, message: "id が指定されていません。", requestId: verifiedRequestId },
+      { status: 400, headers: { "x-request-id": verifiedRequestId } },
     );
   }
 
@@ -141,16 +147,16 @@ export async function action({ params, request }: ActionFunctionArgs) {
       {
         ok: false,
         message: "入力内容を確認してください。",
-        requestId,
+        requestId: verifiedRequestId,
         submissionResult: submission.reply(),
       },
-      { status: 400, headers: { "x-request-id": requestId } },
+      { status: 400, headers: { "x-request-id": verifiedRequestId } },
     );
   }
 
   try {
     const result = await updateQuestion({
-      callContext: { requestId, userId: user.userId },
+      callContext: { requestId: verifiedRequestId, userId: user.userId },
       request: {
         questionId,
         draft: {
@@ -173,12 +179,12 @@ export async function action({ params, request }: ActionFunctionArgs) {
           id: updatedQuestion.id,
           prompt: updatedQuestion.prompt,
         },
-        requestId,
+        requestId: verifiedRequestId,
         submissionResult: submission.reply(),
       },
       {
         headers: {
-          "x-request-id": requestId,
+          "x-request-id": verifiedRequestId,
         },
       },
     );
@@ -186,7 +192,7 @@ export async function action({ params, request }: ActionFunctionArgs) {
     const normalized = normalizeGrpcHttpError({
       error,
       fallbackMessage: "問題の更新に失敗しました。時間をおいて再試行してください。",
-      requestId,
+      requestId: verifiedRequestId,
     });
     const convertedFieldErrors = toQuestionConformFieldErrors(normalized.fieldErrors);
 

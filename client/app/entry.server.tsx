@@ -14,6 +14,28 @@ import {
 } from "./services/observability.server";
 
 const ABORT_DELAY_MS = 5_000;
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "form-action 'self'",
+].join("; ");
+
+// applySecurityHeaders は全レスポンスへ共通セキュリティヘッダを付与する。
+function applySecurityHeaders(headers: Headers): void {
+  headers.set("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+  headers.set("X-Frame-Options", "DENY");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+}
 
 // handleRequest は Remix が HTTP リクエストを受けた際の SSR 処理を行う。
 export default function handleRequest(
@@ -56,6 +78,7 @@ export default function handleRequest(
           // NOTE: Node.js の Readable を Web の ReadableStream に変換し、Response の型と実装に合わせる。
           const stream = createReadableStreamFromReadable(body);
 
+          applySecurityHeaders(responseHeaders);
           responseHeaders.set("Content-Type", "text/html; charset=utf-8");
 
           resolve(

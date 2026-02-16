@@ -9,10 +9,19 @@ on:
       - "client/**"
       - "proto/**"
       - "infra/fly/**"
-      - "scripts/**"
+      - "scripts/apply_db_migrations.sh"
+      - "scripts/deploy_production_fly.sh"
+      - "scripts/production_preflight.sh"
+      - "scripts/production_smoke_check.sh"
+      - "scripts/production_sync_fly_secrets.sh"
+      - "scripts/verify_migration_files.sh"
       - "Makefile"
       - ".dockerignore"
       - ".github/workflows/deploy-fly.yml"
+    paths-ignore:
+      - "backend/**/*_test.go"
+      - "client/tests/**"
+      - ".walkthrough/**"
   workflow_dispatch:
     inputs:
       target_environment:
@@ -38,6 +47,11 @@ on:
         required: true
         default: false
         type: boolean
+      deploy_authentik:
+        description: "Authentik を同時デプロイする（production 手動時のみ有効）"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -47,9 +61,62 @@ defaults:
     shell: bash
 
 jobs:
+  resolve-staging-deploy-flags:
+    # push / 手動の両方で staging 用フラグを 1 箇所で決定する。
+    runs-on: ubuntu-latest
+    outputs:
+      run_migrations: ${{ steps.resolve.outputs.run_migrations }}
+      run_smoke_check: ${{ steps.resolve.outputs.run_smoke_check }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve deploy flags
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run_migrations=${{ inputs.run_migrations }}" >> "$GITHUB_OUTPUT"
+            echo "run_smoke_check=${{ inputs.run_smoke_check }}" >> "$GITHUB_OUTPUT"
+            echo "INFO: 手動実行入力をそのまま採用しました。"
+            exit 0
+          fi
+
+          base_sha="${{ github.event.before }}"
+          if [ -z "$base_sha" ] || [ "$base_sha" = "0000000000000000000000000000000000000000" ]; then
+            changed_files="$(git ls-files)"
+          else
+            changed_files="$(git diff --name-only "$base_sha" "${{ github.sha }}")"
+          fi
+
+          run_migrations=false
+          run_smoke_check=false
+
+          while IFS= read -r file_path; do
+            [ -z "$file_path" ] && continue
+            case "$file_path" in
+              backend/db/migrations/*|scripts/apply_db_migrations.sh|scripts/verify_migration_files.sh)
+                run_migrations=true
+                ;;
+            esac
+            case "$file_path" in
+              backend/*|client/*|proto/*|infra/fly/*|scripts/deploy_production_fly.sh|scripts/production_smoke_check.sh|scripts/production_preflight.sh|scripts/production_sync_fly_secrets.sh|Makefile|.dockerignore)
+                run_smoke_check=true
+                ;;
+            esac
+          done <<EOF_CHANGED_FILES
+          $changed_files
+          EOF_CHANGED_FILES
+
+          echo "run_migrations=$run_migrations" >> "$GITHUB_OUTPUT"
+          echo "run_smoke_check=$run_smoke_check" >> "$GITHUB_OUTPUT"
+          echo "INFO: push 判定 run_migrations=$run_migrations run_smoke_check=$run_smoke_check"
+
   deploy-staging:
     # main push は staging へ自動デプロイ。
     # 手動実行でも target_environment=staging を選べるようにする。
+    needs: resolve-staging-deploy-flags
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target_environment == 'staging')
     runs-on: ubuntu-latest
     environment: staging
@@ -63,11 +130,12 @@ jobs:
       # Fly.io アプリ設定（Environment variables を想定）
       FLY_CLIENT_APP: ${{ vars.FLY_CLIENT_APP }}
       FLY_BACKEND_APP: ${{ vars.FLY_BACKEND_APP }}
-      FLY_CLIENT_CONFIG: ${{ vars.FLY_CLIENT_CONFIG }}
-      FLY_BACKEND_CONFIG: ${{ vars.FLY_BACKEND_CONFIG }}
+      FLY_CLIENT_CONFIG: ${{ vars.FLY_CLIENT_CONFIG || 'infra/fly/client.fly.toml' }}
+      FLY_BACKEND_CONFIG: ${{ vars.FLY_BACKEND_CONFIG || 'infra/fly/backend.fly.toml' }}
       FLY_AUTHENTIK_APP: ${{ vars.FLY_AUTHENTIK_APP }}
       FLY_AUTHENTIK_CONFIG: ${{ vars.FLY_AUTHENTIK_CONFIG }}
-      DEPLOY_AUTHENTIK: ${{ vars.DEPLOY_AUTHENTIK }}
+      # staging は追加固定費を防ぐため Authentik 同時デプロイを無効固定にする。
+      DEPLOY_AUTHENTIK: "false"
 
       # Secrets（Environment secrets を想定）
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -128,8 +196,8 @@ jobs:
 
       - name: Deploy to staging
         env:
-          RUN_MIGRATIONS: ${{ github.event_name == 'workflow_dispatch' && inputs.run_migrations || true }}
-          RUN_SMOKE_CHECK: ${{ github.event_name == 'workflow_dispatch' && inputs.run_smoke_check || true }}
+          RUN_MIGRATIONS: ${{ needs.resolve-staging-deploy-flags.outputs.run_migrations }}
+          RUN_SMOKE_CHECK: ${{ needs.resolve-staging-deploy-flags.outputs.run_smoke_check }}
         run: make production-deploy
 
   deploy-production:
@@ -147,11 +215,11 @@ jobs:
       # Fly.io アプリ設定（Environment variables を想定）
       FLY_CLIENT_APP: ${{ vars.FLY_CLIENT_APP }}
       FLY_BACKEND_APP: ${{ vars.FLY_BACKEND_APP }}
-      FLY_CLIENT_CONFIG: ${{ vars.FLY_CLIENT_CONFIG }}
-      FLY_BACKEND_CONFIG: ${{ vars.FLY_BACKEND_CONFIG }}
+      FLY_CLIENT_CONFIG: ${{ vars.FLY_CLIENT_CONFIG || 'infra/fly/client.production.fly.toml' }}
+      FLY_BACKEND_CONFIG: ${{ vars.FLY_BACKEND_CONFIG || 'infra/fly/backend.production.fly.toml' }}
       FLY_AUTHENTIK_APP: ${{ vars.FLY_AUTHENTIK_APP }}
       FLY_AUTHENTIK_CONFIG: ${{ vars.FLY_AUTHENTIK_CONFIG }}
-      DEPLOY_AUTHENTIK: ${{ vars.DEPLOY_AUTHENTIK }}
+      DEPLOY_AUTHENTIK: ${{ inputs.deploy_authentik }}
 
       # Secrets（Environment secrets を想定）
       DATABASE_URL: ${{ secrets.DATABASE_URL }}

@@ -1,4 +1,4 @@
-# Remix client（公開Web）用の Fly.io 設定。
+# Remix client（公開Web）用の Fly.io 設定（production 向け常時起動）。
 # app 名は scripts 側から --app で渡すため、ここでは固定しない。
 
 primary_region = "nrt"
@@ -11,8 +11,8 @@ primary_region = "nrt"
   protocol = "tcp"
   auto_stop_machines = "stop"
   auto_start_machines = true
-  # 既定はコスト最適化を優先し、アクセス時に自動起動する。
-  min_machines_running = 0
+  # production はコールドスタート抑制のため 1 台常時起動にする。
+  min_machines_running = 1
 
   [[services.ports]]
     port = 80

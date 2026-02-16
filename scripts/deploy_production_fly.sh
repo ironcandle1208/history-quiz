@@ -64,6 +64,8 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
   require_command "psql"
   require_env "DATABASE_URL"
   ./scripts/apply_db_migrations.sh
+else
+  echo "INFO: RUN_MIGRATIONS=false のため migration をスキップします。"
 fi
 
 # 依存順に backend -> client をデプロイする。
@@ -81,6 +83,8 @@ fi
 # 既定でスモークチェックを実行し、デプロイ直後の重大障害を即検知する。
 if [ "${RUN_SMOKE_CHECK:-true}" = "true" ]; then
   ./scripts/production_smoke_check.sh
+else
+  echo "INFO: RUN_SMOKE_CHECK=false のためスモークチェックをスキップします。"
 fi
 
 echo "完了: 本番デプロイフローが終了しました。"
