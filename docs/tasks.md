@@ -317,7 +317,7 @@
   - _Requirements: 5.3_
   - _Prompt: Role: Production Engineer | Task: Define concrete production runbook and deployment configuration for Fly.io + Neon with secret handling and rollback steps | Restrictions: Prefer reproducible, scriptable steps over manual operation | Success: Production deployment is repeatable and documented end-to-end_
 
-- [ ] 34. 監視・可観測性を導入する（ログ/メトリクス/アラート最小セット）
+- [x] 34. 監視・可観測性を導入する（ログ/メトリクス/アラート最小セット）
   - File: `backend/internal/infrastructure/observability/*`（新規）, `client/app/services/observability.server.ts`（新規）, `docs/Phase2/observability.md`（新規）
   - Include:
     - 構造化ログ（requestId/userId/method/status/latency）

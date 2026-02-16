@@ -59,6 +59,11 @@
 - **Dashboard Framework**: Web（マイページ）
 - **Real-time Communication**: 初期は不要（操作起点の更新）
 - **Visualization Libraries**: 初期はシンプル表示（将来グラフ化を検討）
+- **Observability Baseline**:
+  - Backend は gRPC interceptor で構造化ログ（`requestId` / `userId` / `method` / `status` / `latencyMs`）を出力する
+  - Remix は `entry.server.tsx` と gRPC client wrapper で HTTP/gRPC の構造化ログを出力する
+  - 両者とも in-memory 集計で `requestCount` / `errorRate` / `p95Latency` を定期スナップショット出力する
+  - 運用手順は `docs/Phase2/observability.md` を単一の参照元とする
 
 ## Development Environment
 
@@ -219,7 +224,6 @@ JSON で返す場合は、以下の形を基本とする（実装でキー名は
 14. **Cloudflare 前段構成**: Fly 上のアプリを Origin として維持しながら、TLS/WAF/レート制御をエッジで統一運用するため
 
 ## Known Limitations
-- 監視・可観測性（メトリクス/トレース）は初期スコープ外（必要に応じて追加）
 - Cloudflare 設定の IaC 化（Terraform 等）は未整備で、現時点では Runbook ベースの運用が中心
 - Authentik をセルフホストする場合、Authentik 用の Postgres/Redis を別途運用する必要がある（アプリDBの Neon とは別）
 - Authentik の Fly.io 本番 `fly.toml` は環境依存（外部DB/Redis構成）なので、本リポジトリではテンプレート未同梱

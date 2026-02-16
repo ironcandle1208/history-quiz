@@ -9,11 +9,14 @@ import {
   credentials,
   loadPackageDefinition,
   Metadata,
+  status as grpcStatus,
   type ChannelCredentials,
   type ServiceClientConstructor,
   type ServiceError,
 } from "@grpc/grpc-js";
 import { loadSync } from "@grpc/proto-loader";
+
+import { ensureObservabilityReporterStarted, observeGrpcCall } from "../services/observability.server";
 
 const ENV_BACKEND_GRPC_ADDRESS = "BACKEND_GRPC_ADDRESS";
 const ENV_BACKEND_GRPC_TIMEOUT_MS = "BACKEND_GRPC_TIMEOUT_MS";
@@ -25,6 +28,26 @@ const DEFAULT_BACKEND_GRPC_TIMEOUT_MS = 3_000;
 
 const METADATA_KEY_USER_ID = "x-user-id";
 const METADATA_KEY_REQUEST_ID = "x-request-id";
+
+const GRPC_STATUS_NAME_BY_NUMBER: Record<number, string> = {
+  [grpcStatus.OK]: "OK",
+  [grpcStatus.CANCELLED]: "CANCELLED",
+  [grpcStatus.UNKNOWN]: "UNKNOWN",
+  [grpcStatus.INVALID_ARGUMENT]: "INVALID_ARGUMENT",
+  [grpcStatus.DEADLINE_EXCEEDED]: "DEADLINE_EXCEEDED",
+  [grpcStatus.NOT_FOUND]: "NOT_FOUND",
+  [grpcStatus.ALREADY_EXISTS]: "ALREADY_EXISTS",
+  [grpcStatus.PERMISSION_DENIED]: "PERMISSION_DENIED",
+  [grpcStatus.RESOURCE_EXHAUSTED]: "RESOURCE_EXHAUSTED",
+  [grpcStatus.FAILED_PRECONDITION]: "FAILED_PRECONDITION",
+  [grpcStatus.ABORTED]: "ABORTED",
+  [grpcStatus.OUT_OF_RANGE]: "OUT_OF_RANGE",
+  [grpcStatus.UNIMPLEMENTED]: "UNIMPLEMENTED",
+  [grpcStatus.INTERNAL]: "INTERNAL",
+  [grpcStatus.UNAVAILABLE]: "UNAVAILABLE",
+  [grpcStatus.DATA_LOSS]: "DATA_LOSS",
+  [grpcStatus.UNAUTHENTICATED]: "UNAUTHENTICATED",
+};
 
 const REQUIRED_PROTO_RELATIVE_PATHS = [
   "historyquiz/quiz/v1/quiz_service.proto",
@@ -91,6 +114,23 @@ type QuestionRawClient = {
 type UserRawClient = {
   getMyStats: UnaryMethod<unknown, unknown>;
   listMyAttempts: UnaryMethod<unknown, unknown>;
+};
+
+const QUIZ_RPC_METHOD_NAMES: Record<QuizMethod, string> = {
+  getQuestion: "/historyquiz.quiz.v1.QuizService/GetQuestion",
+  submitAnswer: "/historyquiz.quiz.v1.QuizService/SubmitAnswer",
+};
+
+const QUESTION_RPC_METHOD_NAMES: Record<QuestionMethod, string> = {
+  createQuestion: "/historyquiz.question.v1.QuestionService/CreateQuestion",
+  getMyQuestion: "/historyquiz.question.v1.QuestionService/GetMyQuestion",
+  listMyQuestions: "/historyquiz.question.v1.QuestionService/ListMyQuestions",
+  updateQuestion: "/historyquiz.question.v1.QuestionService/UpdateQuestion",
+};
+
+const USER_RPC_METHOD_NAMES: Record<UserMethod, string> = {
+  getMyStats: "/historyquiz.user.v1.UserService/GetMyStats",
+  listMyAttempts: "/historyquiz.user.v1.UserService/ListMyAttempts",
 };
 
 type GrpcClients = {
@@ -288,8 +328,10 @@ function withRequestContext<TRequest extends RequestWithContext>(request: TReque
 function invokeUnary<TRequest extends RequestWithContext, TResponse>(params: {
   callContext: GrpcCallContext;
   method: UnaryMethod<TRequest, TResponse>;
+  rpcMethodName: string;
   request: TRequest;
 }): Promise<GrpcCallResult<TResponse>> {
+  ensureObservabilityReporterStarted();
   const normalizedCallContext = normalizeCallContext(params.callContext);
   const requestWithContext = withRequestContext(params.request, normalizedCallContext.requestId);
   const grpcMetadataValues = buildGrpcMetadata({
@@ -298,10 +340,18 @@ function invokeUnary<TRequest extends RequestWithContext, TResponse>(params: {
   });
   const metadataObject = createMetadataObject(grpcMetadataValues);
   const deadline = new Date(Date.now() + normalizedCallContext.timeoutMs);
+  const startedAtMs = Date.now();
 
   return new Promise((resolve, reject) => {
     params.method(requestWithContext, metadataObject, { deadline }, (error, response) => {
       if (error) {
+        observeGrpcCall({
+          grpcCode: toGrpcCodeName(error.code),
+          requestId: normalizedCallContext.requestId,
+          rpcMethod: params.rpcMethodName,
+          startedAtMs,
+          userId: normalizedCallContext.userId || undefined,
+        });
         reject(
           new GrpcCallError({
             grpcError: error,
@@ -311,12 +361,28 @@ function invokeUnary<TRequest extends RequestWithContext, TResponse>(params: {
         return;
       }
 
+      observeGrpcCall({
+        grpcCode: "OK",
+        requestId: normalizedCallContext.requestId,
+        rpcMethod: params.rpcMethodName,
+        startedAtMs,
+        userId: normalizedCallContext.userId || undefined,
+      });
+
       resolve({
         requestId: normalizedCallContext.requestId,
         response,
       });
     });
   });
+}
+
+// toGrpcCodeName は gRPC の数値ステータスを文字列表現へ変換する。
+function toGrpcCodeName(code: number | undefined): string {
+  if (typeof code !== "number") {
+    return "UNKNOWN";
+  }
+  return GRPC_STATUS_NAME_BY_NUMBER[code] ?? "UNKNOWN";
 }
 
 type QuizMethod = "getQuestion" | "submitAnswer";
@@ -334,6 +400,7 @@ export function callQuizService<TRequest extends RequestWithContext, TResponse>(
   return invokeUnary({
     callContext: params.callContext,
     method,
+    rpcMethodName: QUIZ_RPC_METHOD_NAMES[params.method],
     request: params.request,
   });
 }
@@ -349,6 +416,7 @@ export function callQuestionService<TRequest extends RequestWithContext, TRespon
   return invokeUnary({
     callContext: params.callContext,
     method,
+    rpcMethodName: QUESTION_RPC_METHOD_NAMES[params.method],
     request: params.request,
   });
 }
@@ -364,6 +432,7 @@ export function callUserService<TRequest extends RequestWithContext, TResponse>(
   return invokeUnary({
     callContext: params.callContext,
     method,
+    rpcMethodName: USER_RPC_METHOD_NAMES[params.method],
     request: params.request,
   });
 }

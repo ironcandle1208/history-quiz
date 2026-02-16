@@ -5,7 +5,10 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
+	"time"
 
+	"github.com/history-quiz/historyquiz/internal/infrastructure/observability"
 	"github.com/history-quiz/historyquiz/internal/infrastructure/postgres"
 	grpcserver "github.com/history-quiz/historyquiz/internal/transport/grpc"
 	questionusecase "github.com/history-quiz/historyquiz/internal/usecase/question"
@@ -44,14 +47,41 @@ func main() {
 	questionUC := questionusecase.NewUsecase(questionRepo, userRepo)
 	userUC := userusecase.NewUsecase(attemptRepo)
 
+	collector := observability.NewCollector(512)
+	unaryObserver := observability.NewUnaryObserver(log.Default(), collector)
+	go observability.StartSnapshotReporter(
+		context.Background(),
+		log.Default(),
+		collector,
+		resolveMetricsReportInterval(),
+	)
+
 	s := grpcserver.NewServer(grpcserver.Dependencies{
-		QuizUsecase:     quizUC,
-		QuestionUsecase: questionUC,
-		UserUsecase:     userUC,
+		QuizUsecase:                   quizUC,
+		QuestionUsecase:               questionUC,
+		UserUsecase:                   userUC,
+		ObservabilityUnaryInterceptor: unaryObserver.Interceptor(),
 	})
 
 	log.Printf("gRPC server listening on :%s", port)
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("serve failed: %v", err)
 	}
+}
+
+// resolveMetricsReportInterval はメトリクス定期出力間隔を秒単位で解決する。
+func resolveMetricsReportInterval() time.Duration {
+	const envName = "BACKEND_OBSERVABILITY_REPORT_INTERVAL_SECONDS"
+	const defaultSeconds = 60
+
+	raw := os.Getenv(envName)
+	if raw == "" {
+		return time.Duration(defaultSeconds) * time.Second
+	}
+
+	seconds, err := strconv.Atoi(raw)
+	if err != nil || seconds <= 0 {
+		return time.Duration(defaultSeconds) * time.Second
+	}
+	return time.Duration(seconds) * time.Second
 }

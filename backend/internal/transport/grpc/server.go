@@ -14,9 +14,10 @@ import (
 
 // Dependencies は gRPC transport が必要とする依存（ユースケース）をまとめたもの。
 type Dependencies struct {
-	QuizUsecase     *quizusecase.Usecase
-	QuestionUsecase *questionusecase.Usecase
-	UserUsecase     *userusecase.Usecase
+	QuizUsecase                   *quizusecase.Usecase
+	QuestionUsecase               *questionusecase.Usecase
+	UserUsecase                   *userusecase.Usecase
+	ObservabilityUnaryInterceptor grpc.UnaryServerInterceptor
 }
 
 // NewServer は gRPC サーバーを生成する。
@@ -28,12 +29,19 @@ func NewServer(deps Dependencies) *grpc.Server {
 		"/historyquiz.quiz.v1.QuizService/SubmitAnswer": {},
 	}
 
-	s := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(
-			interceptors.UnaryContextInterceptor(false),
-			interceptors.UnaryRequireAuthByMethodInterceptor(allowAnonymous),
-		),
-	)
+	unaryInterceptors := []grpc.UnaryServerInterceptor{
+		interceptors.UnaryContextInterceptor(false),
+	}
+	if deps.ObservabilityUnaryInterceptor != nil {
+		unaryInterceptors = append(unaryInterceptors, deps.ObservabilityUnaryInterceptor)
+	}
+	// 順序が重要:
+	// 1) metadata から requestId/userId を context へ注入
+	// 2) 観測 interceptor で認証失敗を含む全 RPC を計測
+	// 3) 認証必須メソッドを最終的に遮断
+	unaryInterceptors = append(unaryInterceptors, interceptors.UnaryRequireAuthByMethodInterceptor(allowAnonymous))
+
+	s := grpc.NewServer(grpc.ChainUnaryInterceptor(unaryInterceptors...))
 
 	quizv1.RegisterQuizServiceServer(s, services.NewQuizService(deps.QuizUsecase))
 	questionv1.RegisterQuestionServiceServer(s, services.NewQuestionService(deps.QuestionUsecase))
