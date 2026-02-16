@@ -41,7 +41,13 @@ terraform apply
 - `SSL/TLS: Full (strict)`
 - `Bypass Cache`: `/quiz*`, `/me*`, `/login*`, `/auth/*`, `/questions*`
 - 基本キャッシュ: `/build/*`, `/assets/*`
-6. WAF / レート制限は Task 36 で追加適用する（本タスクでは対象外）。
+6. WAF / レート制限（Task 36）の初期値を `terraform.tfvars` で確認して適用する。
+- `POST /login`: 10 req / 60s / IP
+- `POST /quiz`: 60 req / 60s / IP
+- `POST /questions/new`: 20 req / 60s / IP
+- `POST /questions/:id/edit`: 20 req / 60s / IP
+- Bot系 User-Agent の状態変更 POST は `managed_challenge`
+- 異常クエリ（SQLi/XSS/Path Traversal）は `block`
 
 ### 1.3 必須コマンド
 - `flyctl`
@@ -146,7 +152,15 @@ flyctl releases rollback <release-id> --app <app-name>
 3. 影響が継続する場合は Cloudflare ダッシュボードで該当ルールを一時無効化する。
 4. `curl -I` と `make production-smoke` で復旧確認する。
 
-### 5.3 DB 障害時（Neon restore）
+### 5.3 Cloudflare 誤検知時の緩和手順（WAF / Rate Limit）
+1. 失敗リクエストの `Ray ID`、IP、URI、発生時刻を採取する。
+2. Cloudflare Events で該当ルール（WAF or Rate Limit）を特定する。
+3. まず `infra/cloudflare/terraform.tfvars` の `waf_allowlist_ip_cidrs` に運用端末 CIDR を一時追加し、`terraform apply` する。
+4. 恒久対応が必要な場合は、閾値（`rate_limit_*`）または WAF 条件を調整して `terraform apply` する。
+5. 再発が止まったことを確認後、一時 allowlist を削除して `terraform apply` する。
+6. 変更理由・影響範囲・復旧時刻を運用ログへ記録する。
+
+### 5.4 DB 障害時（Neon restore）
 1. 影響範囲確定まで書き込みを停止する。
 2. Neon の復元ポイントから復元先ブランチ/インスタンスを作成する。
 3. 復元先の接続文字列へ `DATABASE_URL` を更新し、`make production-sync-secrets` を実行する。
@@ -225,6 +239,10 @@ flyctl releases rollback <release-id> --app <app-name>
 ### 8.6 Cloudflare IaC 実行時の追加設定
 - 追加 Secrets: `CLOUDFLARE_API_TOKEN`
 - 追加 Variables: `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_PUBLIC_HOSTNAME`, `CLOUDFLARE_FLY_ORIGIN_HOSTNAME`
+- 運用入力（`terraform.tfvars`）:
+  - `waf_allowlist_ip_cidrs`（誤検知緩和の一時IP）
+  - `waf_blocked_ip_cidrs`（恒久遮断IP）
+  - `rate_limit_*`（状態変更 POST の閾値）
 
 ## 9. Fly.io + Cloudflare コスト管理
 

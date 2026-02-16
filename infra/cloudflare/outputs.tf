@@ -18,3 +18,12 @@ output "static_cache_rule_count" {
   value       = length(cloudflare_page_rule.static_cache)
 }
 
+output "custom_waf_rule_count" {
+  description = "カスタム WAF ルール数。"
+  value       = length(cloudflare_ruleset.custom_waf.rules)
+}
+
+output "post_rate_limit_rule_count" {
+  description = "状態変更 POST 向けレート制限ルール数。"
+  value       = length(cloudflare_ruleset.post_rate_limit.rules)
+}

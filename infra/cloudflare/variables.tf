@@ -56,3 +56,50 @@ variable "proxied" {
   default     = true
 }
 
+variable "waf_allowlist_ip_cidrs" {
+  description = "WAF/Rate Limit の対象から除外する CIDR 一覧。誤検知時の一次緩和に使う。"
+  type        = list(string)
+  default     = []
+}
+
+variable "waf_blocked_ip_cidrs" {
+  description = "常時ブロックする CIDR 一覧。悪性IPが確定した場合のみ追加する。"
+  type        = list(string)
+  default     = []
+}
+
+variable "rate_limit_login_requests_per_period" {
+  description = "/login POST の期間内許容リクエスト数。"
+  type        = number
+  default     = 10
+}
+
+variable "rate_limit_quiz_requests_per_period" {
+  description = "/quiz POST の期間内許容リクエスト数。"
+  type        = number
+  default     = 60
+}
+
+variable "rate_limit_question_create_requests_per_period" {
+  description = "/questions/new POST の期間内許容リクエスト数。"
+  type        = number
+  default     = 20
+}
+
+variable "rate_limit_question_edit_requests_per_period" {
+  description = "/questions/:id/edit POST の期間内許容リクエスト数。"
+  type        = number
+  default     = 20
+}
+
+variable "rate_limit_period_seconds" {
+  description = "レート制限の観測期間（秒）。"
+  type        = number
+  default     = 60
+}
+
+variable "rate_limit_mitigation_timeout_seconds" {
+  description = "レート制限発火後の緩和アクション継続時間（秒）。"
+  type        = number
+  default     = 120
+}

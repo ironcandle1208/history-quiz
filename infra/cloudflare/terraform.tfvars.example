@@ -2,3 +2,14 @@ zone_id             = "REPLACE_WITH_CLOUDFLARE_ZONE_ID"
 public_hostname     = "history-quiz.example.com"
 fly_origin_hostname = "history-quiz-client.fly.dev"
 
+# 誤検知時に一時的に緩和したい運用端末 CIDR を追加する（例: ["203.0.113.10/32"]）。
+waf_allowlist_ip_cidrs = []
+
+# 明確に悪性と判断した IP/CIDR を追加する（例: ["198.51.100.0/24"]）。
+waf_blocked_ip_cidrs = []
+
+# 各状態変更 POST の初期レート制限値（60秒窓）。
+rate_limit_login_requests_per_period           = 10
+rate_limit_quiz_requests_per_period            = 60
+rate_limit_question_create_requests_per_period = 20
+rate_limit_question_edit_requests_per_period   = 20

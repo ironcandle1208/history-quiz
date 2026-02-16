@@ -1,6 +1,6 @@
 # セキュリティリスクチェックリスト（L7 / HTTP）
 
-最終更新日: 2026-02-15
+最終更新日: 2026-02-16
 
 ## 今回判明したリスク
 
@@ -9,21 +9,21 @@
   - 確認箇所: `client/app/entry.server.tsx`
   - 補足: `Content-Type` 以外（`Content-Security-Policy`、`X-Frame-Options` or `frame-ancestors`、`X-Content-Type-Options`、`Referrer-Policy`、`Permissions-Policy`、`Strict-Transport-Security`）が未設定。
 
-- [ ] `中` レート制限・スロットリングが未導入
-  - 想定影響: ブルートフォース、スパム投稿、アプリ層DoSの耐性不足。
-  - 確認箇所: `client/app/routes/login.tsx`, `client/app/routes/quiz.tsx`, `client/app/routes/questions.new.tsx`, `client/app/routes/questions.$id.edit.tsx`, `docs/Phase2/production-operations.md`
+- [x] `中` レート制限・スロットリングが未導入（2026-02-16 解消）
+  - 対応内容: `infra/cloudflare` の Terraform で状態変更系 `POST` 向けレート制限を導入した。
+  - 確認箇所: `infra/cloudflare/main.tf`, `infra/cloudflare/variables.tf`, `docs/Phase2/production-operations.md`
 
 - [ ] `中` HTTPリクエストボディサイズの上限未設定
   - 想定影響: 大きなフォーム投稿によるメモリ/CPU圧迫のリスク。
   - 確認箇所: `client/app/routes/quiz.tsx`, `client/app/routes/questions.new.tsx`, `client/app/routes/questions.$id.edit.tsx`
 
-- [ ] `中` Cloudflare 側 HTTPS 強制 / TLS モードの標準化不足
-  - 想定影響: 平文HTTPアクセスや TLS 設定不一致（Origin 接続の脆弱化）が残る可能性。
-  - 確認箇所: `docs/Phase2/production-operations.md`
+- [x] `中` Cloudflare 側 HTTPS 強制 / TLS モードの標準化不足（2026-02-16 解消）
+  - 対応内容: `infra/cloudflare` の Terraform で `Always Use HTTPS` と `SSL/TLS: Full (strict)` を固定化した。
+  - 確認箇所: `infra/cloudflare/main.tf`, `docs/Phase2/production-operations.md`
 
-- [ ] `中` Cloudflare キャッシュルール未整備（認証済みページの誤キャッシュ）
-  - 想定影響: `Set-Cookie` を伴う応答やユーザー依存ページが誤ってキャッシュされ、情報露出を引き起こす可能性。
-  - 確認箇所: `docs/Phase2/production-operations.md`, `client/app/routes/*.tsx`
+- [x] `中` Cloudflare キャッシュルール未整備（認証済みページの誤キャッシュ）（2026-02-16 解消）
+  - 対応内容: 動的パス `Bypass Cache` と静的配信キャッシュを Terraform で固定化した。
+  - 確認箇所: `infra/cloudflare/main.tf`, `docs/Phase2/production-operations.md`
 
 ## 対応方針（2026-02-15時点）
 
@@ -42,6 +42,24 @@
 3. レート制限・スロットリング導入
 4. ボディサイズ上限の導入
 5. Cloudflare キャッシュルール整備
+
+## Cloudflare エッジ防御の運用値（Task 36）
+
+### レート制限（初期値）
+- `POST /login`: `10 req / 60s / IP`（`managed_challenge`）
+- `POST /quiz`: `60 req / 60s / IP`（`managed_challenge`）
+- `POST /questions/new`: `20 req / 60s / IP`（`managed_challenge`）
+- `POST /questions/:id/edit`: `20 req / 60s / IP`（`managed_challenge`）
+
+### WAF 最小セット
+- Bot系 User-Agent で状態変更 POST を試行した場合は `managed_challenge`
+- SQLi/XSS/Path Traversal を含む異常クエリは `block`
+- `waf_blocked_ip_cidrs` に登録した IP/CIDR は `block`
+
+### 誤検知時の一次緩和
+1. Cloudflare Events で一致ルールを特定する。
+2. `waf_allowlist_ip_cidrs` に運用端末 CIDR を一時追加して `terraform apply` する。
+3. 閾値または式を修正し、収束後に一時 allowlist を削除する。
 
 ## Fly.io コスト増大リスク（運用）
 

@@ -339,7 +339,7 @@
   - _Requirements: Security（NFR）, Reliability（NFR）_
   - _Prompt: Role: Platform Engineer | Task: Define Cloudflare baseline configuration as code and align runbook; ensure Fly remains origin behind Cloudflare | Restrictions: Keep initial rule-set minimal and auditable | Success: New environment can reproduce the same Cloudflare edge behavior without manual drift_
 
-- [ ] 36. Cloudflare エッジ防御（WAF/Rate Limit）を導入し、状態変更系 POST を保護する
+- [x] 36. Cloudflare エッジ防御（WAF/Rate Limit）を導入し、状態変更系 POST を保護する
   - File: `infra/cloudflare/*`（更新）, `docs/security.md`（更新）, `docs/Phase2/production-operations.md`（更新）
   - Include:
     - `/login`, `/quiz`, `/questions/new`, `/questions/*/edit` へのレート制限

@@ -98,7 +98,7 @@
   - DNS は Cloudflare Proxy（orange cloud）を有効化する
   - SSL/TLS モードは `Full (strict)` を採用し、`Always Use HTTPS` を有効化する
   - DNS/TLS/Cache の基本ルールは `infra/cloudflare`（Terraform）で管理する
-  - WAF / レート制限ルールは Runbook（`docs/Phase2/production-operations.md`）に従って段階導入する
+  - WAF / レート制限ルールは `infra/cloudflare`（Terraform）で管理し、Runbook（`docs/Phase2/production-operations.md`）で運用する
 - **Remix**: Fly.io のアプリとしてデプロイ（SSR + BFF）
   - Dockerfile: `client/Dockerfile`
   - Fly 設定: `infra/fly/client.fly.toml`
@@ -225,7 +225,7 @@ JSON で返す場合は、以下の形を基本とする（実装でキー名は
 14. **Cloudflare 前段構成**: Fly 上のアプリを Origin として維持しながら、TLS/WAF/レート制御をエッジで統一運用するため
 
 ## Known Limitations
-- Cloudflare の WAF / レート制限 IaC は未整備（Task 36 で追加予定）
+- Cloudflare WAF / レート制限の閾値最適化は運用データに応じた継続調整が必要
 - Authentik をセルフホストする場合、Authentik 用の Postgres/Redis を別途運用する必要がある（アプリDBの Neon とは別）
 - Authentik の Fly.io 本番 `fly.toml` は環境依存（外部DB/Redis構成）なので、本リポジトリではテンプレート未同梱
 - `Pagination.page_token` / `PageInfo.next_page_token` は proto 定義済みだが、Phase1 実装では未対応（常に空）
