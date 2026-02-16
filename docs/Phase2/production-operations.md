@@ -117,10 +117,13 @@ make production-deploy
 3. backend デプロイ
 4. client デプロイ
 5. スモークチェック（既定 `RUN_SMOKE_CHECK=true`）
+  - Cloudflare 公開URLで主要導線を確認する（`/`, `/quiz`, `/login`, `/questions/new`, `/me`）
+  - `http -> https` リダイレクトを確認する
+  - `Bypass Cache` 対象（`/quiz`, `/login`）が `cf-cache-status=HIT` でないことを確認する
 
 補足:
 - `DEPLOY_CLIENT_BASE_URL` は Cloudflare 配下の公開URL（例: `https://history-quiz.example.com`）を設定する。
-- `*.fly.dev` を本番ユーザー導線として扱わない。
+- `DEPLOY_CLIENT_BASE_URL` に `*.fly.dev` を設定しない（preflight で失敗させる）。
 
 ### 4.3 Authentik も同時デプロイする場合
 ```bash
@@ -186,7 +189,7 @@ flyctl releases rollback <release-id> --app <app-name>
 - `scripts/deploy_production_fly.sh`
   - migration + deploy + smoke の一括実行
 - `scripts/production_smoke_check.sh`
-  - デプロイ後の主要導線ヘルスチェック
+  - デプロイ後の主要導線ヘルスチェック（`SMOKE_CHECK_MODE=origin` で Origin 直疎通にも利用可）
 - `infra/cloudflare/*.tf`
   - Cloudflare の DNS / TLS / Cache 基本ルールを Terraform で管理
 
@@ -199,6 +202,7 @@ flyctl releases rollback <release-id> --app <app-name>
 - `workflow_dispatch`:
   - `target_environment=staging|production` を手動選択してデプロイ
   - `run_migrations` / `run_smoke_check` を切り替え可能
+  - `run_origin_direct_check` を有効化すると Origin 直疎通チェックを別ジョブで実行
 
 ### 8.2 Environment（GitHub）設定
 - Environment は `staging` / `production` を作成する。
@@ -233,6 +237,7 @@ flyctl releases rollback <release-id> --app <app-name>
 - `DEPLOY_AUTHENTIK`
 - `FLY_AUTHENTIK_APP`
 - `FLY_AUTHENTIK_CONFIG`
+- `DEPLOY_CLIENT_ORIGIN_BASE_URL`（障害切り分け用の Fly Origin URL）
 - `AUTHENTIK_POSTGRES_USER`
 - `AUTHENTIK_POSTGRES_DB`
 

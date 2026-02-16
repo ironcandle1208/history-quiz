@@ -34,6 +34,23 @@ require_file() {
   fi
 }
 
+# validate_deploy_client_base_url は Cloudflare 公開URLとして妥当かを検証する。
+validate_deploy_client_base_url() {
+  local base_url="$1"
+
+  if [[ ! "$base_url" =~ ^https:// ]]; then
+    echo "エラー: DEPLOY_CLIENT_BASE_URL は https:// で開始する必要があります: $base_url"
+    exit 1
+  fi
+
+  # 本番導線を Cloudflare 公開URLへ統一するため fly.dev を拒否する。
+  if [[ "$base_url" == *".fly.dev"* ]]; then
+    echo "エラー: DEPLOY_CLIENT_BASE_URL に fly.dev は指定できません: $base_url"
+    echo "       Cloudflare 配下の公開URLを設定してください。"
+    exit 1
+  fi
+}
+
 # load_apps_env は Fly 用アプリ設定ファイルを読み込む。
 load_apps_env() {
   local apps_env_path="infra/fly/apps.env"
@@ -82,6 +99,8 @@ require_env "OIDC_CLIENT_ID"
 require_env "OIDC_CLIENT_SECRET"
 require_env "OIDC_REDIRECT_URI"
 require_env "BACKEND_GRPC_ADDRESS"
+require_env "DEPLOY_CLIENT_BASE_URL"
+validate_deploy_client_base_url "$DEPLOY_CLIENT_BASE_URL"
 
 check_authentik_config_if_needed
 

@@ -33,6 +33,11 @@ on:
         required: true
         default: true
         type: boolean
+      run_origin_direct_check:
+        description: "障害切り分け用に Fly Origin 直疎通チェックを実行する"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -82,6 +87,7 @@ jobs:
       BACKEND_GRPC_TLS: ${{ vars.BACKEND_GRPC_TLS }}
       GRPC_PROTO_ROOT: ${{ vars.GRPC_PROTO_ROOT }}
       DEPLOY_CLIENT_BASE_URL: ${{ vars.DEPLOY_CLIENT_BASE_URL }}
+      DEPLOY_CLIENT_ORIGIN_BASE_URL: ${{ vars.DEPLOY_CLIENT_ORIGIN_BASE_URL }}
       AUTHENTIK_POSTGRES_USER: ${{ vars.AUTHENTIK_POSTGRES_USER }}
       AUTHENTIK_POSTGRES_DB: ${{ vars.AUTHENTIK_POSTGRES_DB }}
     steps:
@@ -165,6 +171,7 @@ jobs:
       BACKEND_GRPC_TLS: ${{ vars.BACKEND_GRPC_TLS }}
       GRPC_PROTO_ROOT: ${{ vars.GRPC_PROTO_ROOT }}
       DEPLOY_CLIENT_BASE_URL: ${{ vars.DEPLOY_CLIENT_BASE_URL }}
+      DEPLOY_CLIENT_ORIGIN_BASE_URL: ${{ vars.DEPLOY_CLIENT_ORIGIN_BASE_URL }}
       AUTHENTIK_POSTGRES_USER: ${{ vars.AUTHENTIK_POSTGRES_USER }}
       AUTHENTIK_POSTGRES_DB: ${{ vars.AUTHENTIK_POSTGRES_DB }}
     steps:
@@ -208,3 +215,81 @@ jobs:
           RUN_MIGRATIONS: ${{ inputs.run_migrations }}
           RUN_SMOKE_CHECK: ${{ inputs.run_smoke_check }}
         run: make production-deploy
+
+  origin-direct-smoke-staging:
+    # Cloudflare 障害時の切り分け用途として、手動実行時のみ Origin 直疎通を許可する。
+    if: github.event_name == 'workflow_dispatch' && inputs.target_environment == 'staging' && inputs.run_origin_direct_check
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      FLY_CLIENT_APP: ${{ vars.FLY_CLIENT_APP }}
+      FLY_BACKEND_APP: ${{ vars.FLY_BACKEND_APP }}
+      DEPLOY_CLIENT_ORIGIN_BASE_URL: ${{ vars.DEPLOY_CLIENT_ORIGIN_BASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@v1
+
+      - name: Validate origin direct URL
+        run: |
+          if [ -z "${DEPLOY_CLIENT_ORIGIN_BASE_URL:-}" ]; then
+            echo "エラー: DEPLOY_CLIENT_ORIGIN_BASE_URL が未設定です。"
+            echo "       staging 環境変数に Fly Origin URL を設定してください。"
+            exit 1
+          fi
+
+      - name: Prepare infra/fly/apps.env
+        run: |
+          cat > infra/fly/apps.env <<EOF_APPS
+          FLY_CLIENT_APP=${FLY_CLIENT_APP}
+          FLY_BACKEND_APP=${FLY_BACKEND_APP}
+          EOF_APPS
+
+      - name: Origin direct smoke (staging)
+        env:
+          SMOKE_CHECK_MODE: origin
+          DEPLOY_CLIENT_BASE_URL: ${{ vars.DEPLOY_CLIENT_ORIGIN_BASE_URL }}
+        run: make production-smoke
+
+  origin-direct-smoke-production:
+    # Cloudflare 障害時の切り分け用途として、手動実行時のみ Origin 直疎通を許可する。
+    if: github.event_name == 'workflow_dispatch' && inputs.target_environment == 'production' && inputs.run_origin_direct_check
+    needs: deploy-production
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      FLY_CLIENT_APP: ${{ vars.FLY_CLIENT_APP }}
+      FLY_BACKEND_APP: ${{ vars.FLY_BACKEND_APP }}
+      DEPLOY_CLIENT_ORIGIN_BASE_URL: ${{ vars.DEPLOY_CLIENT_ORIGIN_BASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@v1
+
+      - name: Validate origin direct URL
+        run: |
+          if [ -z "${DEPLOY_CLIENT_ORIGIN_BASE_URL:-}" ]; then
+            echo "エラー: DEPLOY_CLIENT_ORIGIN_BASE_URL が未設定です。"
+            echo "       production 環境変数に Fly Origin URL を設定してください。"
+            exit 1
+          fi
+
+      - name: Prepare infra/fly/apps.env
+        run: |
+          cat > infra/fly/apps.env <<EOF_APPS
+          FLY_CLIENT_APP=${FLY_CLIENT_APP}
+          FLY_BACKEND_APP=${FLY_BACKEND_APP}
+          EOF_APPS
+
+      - name: Origin direct smoke (production)
+        env:
+          SMOKE_CHECK_MODE: origin
+          DEPLOY_CLIENT_BASE_URL: ${{ vars.DEPLOY_CLIENT_ORIGIN_BASE_URL }}
+        run: make production-smoke

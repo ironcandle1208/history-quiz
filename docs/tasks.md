@@ -350,7 +350,7 @@
   - _Requirements: Security（NFR）_
   - _Prompt: Role: Security Engineer | Task: Apply Cloudflare WAF and rate-limit policies for high-risk routes and document run/rollback procedures | Restrictions: Avoid blocking normal user flows; provide measurable thresholds | Success: Abuse traffic is throttled/blocked at edge and false positives are operationally manageable_
 
-- [ ] 37. デプロイ検証を Cloudflare 経由ドメイン中心へ切り替える（CI/Smoke）
+- [x] 37. デプロイ検証を Cloudflare 経由ドメイン中心へ切り替える（CI/Smoke）
   - File: `scripts/production_preflight.sh`（更新）, `scripts/production_smoke_check.sh`（更新）, `.github/workflows/deploy-fly.yml`（更新）
   - Include:
     - `DEPLOY_CLIENT_BASE_URL` を Cloudflare 公開URLに統一
