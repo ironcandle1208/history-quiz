@@ -23,17 +23,31 @@
 - `BACKEND_GRPC_ADDRESS`（`<backend-app>.internal:50051`）
 
 ### 1.2 Cloudflare 設定（公開経路）
-1. 公開ドメインを Cloudflare Zone に登録し、`client` Origin へ向けたレコードを `Proxied` で作成する。
-2. SSL/TLS は `Full (strict)` を設定し、`Always Use HTTPS` を有効化する。
-3. キャッシュルールは以下を初期値とする。
+1. `infra/cloudflare/terraform.tfvars.example` を `infra/cloudflare/terraform.tfvars` としてコピーする。
+2. `zone_id` / `public_hostname` / `fly_origin_hostname` を実運用値に更新する。
+3. `CLOUDFLARE_API_TOKEN` を環境変数で設定する。
+4. 以下を実行する。
+
+```bash
+cd infra/cloudflare
+terraform init
+terraform plan
+terraform apply
+```
+
+5. 適用後、以下が有効化されていることを確認する。
+- 公開レコード `Proxied`（Fly Origin 参照）
+- `Always Use HTTPS`
+- `SSL/TLS: Full (strict)`
 - `Bypass Cache`: `/quiz*`, `/me*`, `/login*`, `/auth/*`, `/questions*`
-- `Cache Eligible`: `/build/*`, `/assets/*` などの静的配信
-4. WAF / レート制限ルールは状態変更系 `POST`（`/login`, `/quiz`, `/questions/new`, `/questions/*/edit`）を優先して適用する。
+- 基本キャッシュ: `/build/*`, `/assets/*`
+6. WAF / レート制限は Task 36 で追加適用する（本タスクでは対象外）。
 
 ### 1.3 必須コマンド
 - `flyctl`
 - `psql`
 - `curl`
+- `terraform`
 
 ## 2. シークレット管理ポリシー
 
@@ -128,8 +142,9 @@ flyctl releases rollback <release-id> --app <app-name>
 
 ### 5.2 Cloudflare 設定切り戻し
 1. Cloudflare の監査ログで直近変更（WAF/Rate Limit/Cache/DNS）を特定する。
-2. 影響が疑われるルールを前回の安定設定へ戻す（または一時的に無効化する）。
-3. `curl -I` と `make production-smoke` で復旧確認する。
+2. `infra/cloudflare` の直前安定コミットへ切り戻し、`terraform apply` を再実行する。
+3. 影響が継続する場合は Cloudflare ダッシュボードで該当ルールを一時無効化する。
+4. `curl -I` と `make production-smoke` で復旧確認する。
 
 ### 5.3 DB 障害時（Neon restore）
 1. 影響範囲確定まで書き込みを停止する。
@@ -158,6 +173,8 @@ flyctl releases rollback <release-id> --app <app-name>
   - migration + deploy + smoke の一括実行
 - `scripts/production_smoke_check.sh`
   - デプロイ後の主要導線ヘルスチェック
+- `infra/cloudflare/*.tf`
+  - Cloudflare の DNS / TLS / Cache 基本ルールを Terraform で管理
 
 ## 8. GitHub Actions 自動デプロイ
 
@@ -205,9 +222,9 @@ flyctl releases rollback <release-id> --app <app-name>
 - `AUTHENTIK_POSTGRES_USER`
 - `AUTHENTIK_POSTGRES_DB`
 
-### 8.6 Cloudflare API 自動化を行う場合
+### 8.6 Cloudflare IaC 実行時の追加設定
 - 追加 Secrets: `CLOUDFLARE_API_TOKEN`
-- 追加 Variables: `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_PUBLIC_HOSTNAME`
+- 追加 Variables: `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_PUBLIC_HOSTNAME`, `CLOUDFLARE_FLY_ORIGIN_HOSTNAME`
 
 ## 9. Fly.io + Cloudflare コスト管理
 

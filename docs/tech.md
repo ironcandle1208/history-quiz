@@ -97,7 +97,8 @@
 - **Cloudflare（公開エッジ）**:
   - DNS は Cloudflare Proxy（orange cloud）を有効化する
   - SSL/TLS モードは `Full (strict)` を採用し、`Always Use HTTPS` を有効化する
-  - WAF / レート制限 / キャッシュルールは Runbook（`docs/Phase2/production-operations.md`）に従って管理する
+  - DNS/TLS/Cache の基本ルールは `infra/cloudflare`（Terraform）で管理する
+  - WAF / レート制限ルールは Runbook（`docs/Phase2/production-operations.md`）に従って段階導入する
 - **Remix**: Fly.io のアプリとしてデプロイ（SSR + BFF）
   - Dockerfile: `client/Dockerfile`
   - Fly 設定: `infra/fly/client.fly.toml`
@@ -116,7 +117,7 @@
 ### Production Runbook
 - 本番運用の単一Runbookは `docs/Phase2/production-operations.md` を参照する。
 - Fly アプリ名・設定ファイルは `infra/fly/apps.env` で管理する。
-- Cloudflare のゾーン設定・ルールは Runbook に定義したチェックリストで管理する。
+- Cloudflare のゾーン設定・ルールは `infra/cloudflare` と Runbook のチェックリストで管理する。
 - デプロイ前後は `make production-preflight` / `make production-smoke` で確認する。
 
 ### Authentik Ops（リソース管理とバックアップ）
@@ -224,7 +225,7 @@ JSON で返す場合は、以下の形を基本とする（実装でキー名は
 14. **Cloudflare 前段構成**: Fly 上のアプリを Origin として維持しながら、TLS/WAF/レート制御をエッジで統一運用するため
 
 ## Known Limitations
-- Cloudflare 設定の IaC 化（Terraform 等）は未整備で、現時点では Runbook ベースの運用が中心
+- Cloudflare の WAF / レート制限 IaC は未整備（Task 36 で追加予定）
 - Authentik をセルフホストする場合、Authentik 用の Postgres/Redis を別途運用する必要がある（アプリDBの Neon とは別）
 - Authentik の Fly.io 本番 `fly.toml` は環境依存（外部DB/Redis構成）なので、本リポジトリではテンプレート未同梱
 - `Pagination.page_token` / `PageInfo.next_page_token` は proto 定義済みだが、Phase1 実装では未対応（常に空）

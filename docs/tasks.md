@@ -328,7 +328,7 @@
   - _Requirements: Reliability, Performance, Security（NFR）_
   - _Prompt: Role: SRE-minded Full-stack Engineer | Task: Introduce baseline observability for Remix and Go backend and document alert/runbook essentials | Restrictions: Start small; avoid over-instrumentation | Success: Core metrics and logs are visible, and alerting catches major regressions_
 
-- [ ] 35. Cloudflare 前段構成の基盤設定を IaC 化する（DNS/TLS/Cache 基本ルール）
+- [x] 35. Cloudflare 前段構成の基盤設定を IaC 化する（DNS/TLS/Cache 基本ルール）
   - File: `infra/cloudflare/*`（新規）, `docs/Phase2/production-operations.md`（更新）
   - Include:
     - 公開レコードの `Proxied` 設定（Fly Origin を参照）

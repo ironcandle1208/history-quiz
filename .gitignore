@@ -39,3 +39,11 @@ client/public/build/
 # buf/proto 生成時のキャッシュ・一時ディレクトリ
 .buf-cache/
 .tmp-proto-test/
+
+# Terraform（Cloudflare IaC）
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!*.tfvars.example
