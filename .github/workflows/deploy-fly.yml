@@ -18,10 +18,10 @@ on:
       - "Makefile"
       - ".dockerignore"
       - ".github/workflows/deploy-fly.yml"
-    paths-ignore:
-      - "backend/**/*_test.go"
-      - "client/tests/**"
-      - ".walkthrough/**"
+      # paths と paths-ignore は同時定義できないため、除外は否定パターンで表現する。
+      - "!backend/**/*_test.go"
+      - "!client/tests/**"
+      - "!.walkthrough/**"
   workflow_dispatch:
     inputs:
       target_environment:
