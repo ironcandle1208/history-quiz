@@ -111,7 +111,17 @@ terraform apply
 ### 4.1 実行前に環境変数を読み込む
 - 例: CI では Secret Store から注入、手元実行では一時 export。
 
-### 4.2 標準フロー
+### 4.2 Neon DB 初期化（手順4/5を個別実行する場合）
+```bash
+make production-verify-migrations
+make production-apply-migrations
+```
+
+補足:
+- `make production-apply-migrations` は `DATABASE_URL` が必須。
+- `make production-apply-migrations` は内部で `verify_migration_files.sh` を再実行してから適用する。
+
+### 4.3 標準フロー
 ```bash
 make production-preflight
 make production-sync-secrets
@@ -132,7 +142,7 @@ make production-deploy
 - `DEPLOY_CLIENT_BASE_URL` は Cloudflare 配下の公開URL（例: `https://history-quiz.example.com`）を設定する。
 - `DEPLOY_CLIENT_BASE_URL` に `*.fly.dev` を設定しない（preflight で失敗させる）。
 
-### 4.3 Authentik も同時デプロイする場合
+### 4.4 Authentik も同時デプロイする場合
 ```bash
 export DEPLOY_AUTHENTIK=true
 make production-sync-secrets

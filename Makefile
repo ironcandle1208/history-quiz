@@ -1,4 +1,4 @@
-.PHONY: help db-setup db-up db-down db-reset backend-run client-run production-preflight production-sync-secrets production-deploy production-smoke
+.PHONY: help db-setup db-up db-down db-reset backend-run client-run production-preflight production-verify-migrations production-apply-migrations production-sync-secrets production-deploy production-smoke
 
 # アプリDB 用 docker compose ファイルのパスを定義する。
 LOCAL_DB_COMPOSE_FILE := docker-compose.local-db.yml
@@ -15,6 +15,8 @@ help:
 	@echo "  make backend-run # backend/.env 読み込み後に Go gRPC サーバーを起動"
 	@echo "  make client-run  # client/.env 準備後に Remix 開発サーバーを起動"
 	@echo "  make production-preflight   # 本番デプロイ前チェックを実行"
+	@echo "  make production-verify-migrations # マイグレーションファイル検証を実行（手順4）"
+	@echo "  make production-apply-migrations  # DATABASE_URL へマイグレーション適用（手順5a）"
 	@echo "  make production-sync-secrets # Fly.io へ Secrets/設定値を反映"
 	@echo "  make production-deploy      # migration + Fly.io デプロイ + スモークチェック"
 	@echo "  make production-smoke       # 本番スモークチェックのみ実行"
@@ -46,6 +48,14 @@ client-run:
 production-preflight:
 	# 本番デプロイ前に必須コマンド・設定ファイル・環境変数を検証する。
 	@./scripts/production_preflight.sh
+
+production-verify-migrations:
+	# 本番適用前にマイグレーションファイルの命名規約と順序を検証する。
+	@./scripts/verify_migration_files.sh
+
+production-apply-migrations:
+	# DATABASE_URL で指定されたDBへマイグレーションを順次適用する。
+	@./scripts/apply_db_migrations.sh
 
 production-sync-secrets:
 	# Fly.io の各アプリへ Secrets/設定値を反映する。
